@@ -1,0 +1,13 @@
+# --- Primitives ISO FTAM ---
+F_INITIALIZE = "F-INITIALIZE"
+F_SELECT = "F-SELECT"
+F_OPEN = "F-OPEN"
+F_READ = "F-READ"
+F_WRITE = "F-WRITE"
+F_RECOVER = "F-RECOVER"
+F_TERMINATE = "F-TERMINATE"
+
+# --- Configuration Réseau ---
+PORT_DEFAUT = 2121  
+ADRESSE_ECOUTE = "0.0.0.0" # Écoute partout
+TAILLE_BLOC = 1024
