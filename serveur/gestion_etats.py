@@ -1,0 +1,17 @@
+from commun.constantes import ETATS
+
+class MachineEtats:
+    def __init__(self):
+        self.etat_actuel = "IDLE" # État initial [cite: 311, 657]
+
+    def transitionner(self, nouvel_etat):
+        if nouvel_etat in ETATS:
+            self.etat_actuel = nouvel_etat
+            return True
+        return False
+
+    def peut_executer(self, primitive):
+        # Logique de vérification (ex: F-READ nécessite l'état OPEN) 
+        if primitive == "F-READ" and self.etat_actuel != "OPEN":
+            return False
+        return True

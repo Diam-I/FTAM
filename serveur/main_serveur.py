@@ -1,12 +1,25 @@
 import socket
 import threading
 from commun.constantes import PORT_DEFAUT, ADRESSE_ECOUTE
+import json
+from serveur.gestion_etats import MachineEtats
 
 def gerer_client(conn, addr):
-    print(f"[INFO] Connexion de {addr}")
-    with conn:
-        # La logique de traitement des messages JSON viendra ici
-        pass
+    fsm = MachineEtats()
+    while True:
+        data = conn.recv(4096).decode()
+        if not data: break
+        
+        requete = json.loads(data) # Décodage du PDU JSON 
+        primitive = requete.get("primitive")
+        
+        if fsm.peut_executer(primitive):
+            # Traiter la primitive ici (F-INITIALIZE, F-SELECT...)
+            reponse = {"statut": "SUCCÈS", "code": 200} 
+        else:
+            reponse = {"statut": "ERREUR", "code": 403}
+            
+        conn.send(json.dumps(reponse).encode())
 
 def demarrer_serveur():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

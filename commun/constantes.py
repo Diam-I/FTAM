@@ -9,5 +9,15 @@ F_TERMINATE = "F-TERMINATE"
 
 # --- Configuration Réseau ---
 PORT_DEFAUT = 2121  
-ADRESSE_ECOUTE = "0.0.0.0" # Écoute partout
+ADRESSE_ECOUTE = "0.0.0.0" 
 TAILLE_BLOC = 1024
+
+# Codes de statut 
+SUCCES = 200 
+ERREUR_AUTH = 401 
+ERREUR_DROITS = 403 
+ERREUR_NON_TROUVE = 404
+ERREUR_VERROU = 423 
+
+# États de la Machine à États
+ETATS = ["IDLE", "INITIALIZED", "SELECTED", "OPEN"] 
