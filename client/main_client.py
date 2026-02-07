@@ -1,8 +1,6 @@
 import json
-import pwd
 import socket
-import threading
-from commun.constantes import PORT_DEFAUT, ADRESSE_ECOUTE
+from commun.constantes import *
 import sys
 
 
@@ -41,7 +39,7 @@ class ClientFTAM:
 
             # Tentative d'authentification (F-INITIALIZE) #
             res = self.envoyer_requete(
-                "F-INITIALIZE", {"user": utilisateur, "mdp": motDePasse}
+                F_INITIALIZE, {"user": utilisateur, "mdp": motDePasse}
             )
 
             if res and res.get("statut") == "SUCCÈS":
@@ -74,12 +72,12 @@ if __name__ == "__main__":
         if option == "1":
             client.connecter()
         elif option == "2" and client.est_connecte:
-            res = client.envoyer_requete("F-SELECT", {"nom": "."})
+            res = client.envoyer_requete(F_SELECT, {"nom": "."})
             print(f"Serveur dit : {res}")
         elif option == "3" and client.est_connecte:
             nom_f = input("Nom du fichier : ")
             res = client.envoyer_requete(
-                "F-OPEN", {"mode": "lecture", "fichier": nom_f}
+                F_OPEN, {"mode": "lecture", "fichier": nom_f}
             )
             print(f"Réponse : {res}")
         elif option == "4":

@@ -1,7 +1,7 @@
 import socket
 import json
 import os
-from commun.constantes import PORT_DEFAUT, TAILLE_BLOC
+from commun.constantes import *
 
 
 class ClientFTAM:
@@ -31,7 +31,7 @@ class ClientFTAM:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((ip, PORT_DEFAUT))
 
-            res = self.envoyer_requete("F-INITIALIZE", {"user": user, "mdp": mdp})
+            res = self.envoyer_requete(F_INITIALIZE, {"user": user, "mdp": mdp})
             if res.get("statut") == "SUCCÈS":
                 self.est_connecte = True
                 self.session_id = res.get("session_id")
@@ -42,12 +42,12 @@ class ClientFTAM:
 
     def telecharger(self, nom_fichier, offset=0):
         # Sélection et ouverture du fichier #
-        self.envoyer_requete("F-SELECT", {"nom": nom_fichier})
-        self.envoyer_requete("F-OPEN", {"mode": "lecture"})
+        self.envoyer_requete(F_SELECT, {"nom": nom_fichier})
+        self.envoyer_requete(F_OPEN, {"mode": "lecture"})
 
         # Si on reprend après un crash, on utilise F-RECOVER #
         if offset > 0:
-            self.envoyer_requete("F-RECOVER", {"offset": offset})
+            self.envoyer_requete(F_RECOVER, {"offset": offset})
 
         # Réception des données #
         with open(f"telechargements/{nom_fichier}", "ab") as f:
@@ -65,6 +65,6 @@ class ClientFTAM:
     def deconnecter(self):
         # Finir la session et fermer la connexion #
         if self.socket:
-            self.envoyer_requete("F-TERMINATE")
+            self.envoyer_requete(F_TERMINATE)
             self.socket.close()
             self.est_connecte = False

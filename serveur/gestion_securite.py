@@ -13,7 +13,7 @@ UTILISATEURS = {
 }
 
 def authentifier(utilisateur, mdp):
-    """Vérifie les identifiants et retourne le rôle si valide [cite: 599, 600]"""
+    """Vérifie les identifiants et retourne le rôle si valide """
     if utilisateur in UTILISATEURS and UTILISATEURS[utilisateur]["mdp"] == mdp:
         return UTILISATEURS[utilisateur]["role"]
     return None
