@@ -127,6 +127,8 @@ def gerer_client(conn, addr):
                             {K_STAT: "DONNÉES", K_CODE: SUCCES, "data": donnees_b64}
                         )
                         import time
+
+                        #### Commenter pour accélérer les tests, mais à réactiver pour tester la reprise sur incident ####
                         time.sleep(0.5)
                     else:
                         if utilisateur_connecte in SESSIONS_RECOVERY:
