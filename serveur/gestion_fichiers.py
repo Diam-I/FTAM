@@ -1,3 +1,9 @@
+# =================================================================
+# GESTIONNAIRE DU SYSTÈME DE FICHIERS VIRTUEL (VFS)
+# Rôle : Interface avec l'OS pour manipuler les fichiers réels.
+#        Gère l'isolation du stockage, la lecture par blocs et
+#        le mécanisme d'offset pour la REPRISE SUR INCIDENT.
+# =================================================================
 import os
 
 RACINE = "./serveur/stockage/"

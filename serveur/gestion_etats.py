@@ -1,3 +1,9 @@
+# =================================================================
+# MACHINE À ÉTATS FINIS (FSM)
+# Rôle : Garantit la conformité au protocole FTAM en vérifiant 
+#        que les commandes sont envoyées dans le bon ordre 
+#        (ex: Interdire F-READ si l'état n'est pas OPEN).
+# =================================================================
 from commun.constantes import ETATS
 
 class MachineEtats:
