@@ -14,5 +14,5 @@ def verifier_existence(nom):
 def lire_bloc(nom, offset, taille=1024):
     chemin = os.path.join(RACINE, nom)
     with open(chemin, "rb") as f:
-        f.seek(offset) # Pour la reprise sur incident 
+        f.seek(offset) # Reprise sur incident 
         return f.read(taille)

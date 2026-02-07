@@ -23,16 +23,16 @@ def gerer_client(conn, addr):
             primitive = requete.get("primitive")
             parametres = requete.get("parametres", {})
 
-            if primitive == "F-INITIALIZE": # [cite: 382, 496]
+            if primitive == "F-INITIALIZE": 
                 role = authentifier(parametres.get("user"), parametres.get("mdp"))
                 if role:
-                    fsm.transitionner("INITIALIZED") # Passage à l'état INITIALIZED [cite: 315]
+                    fsm.transitionner("INITIALIZED") 
                     utilisateur_connecte = parametres.get("user")
                     reponse = {"statut": "SUCCÈS", "code": 200, "role": role}
                 else:
                     reponse = {"statut": "ERREUR", "code": 401, "message": "Identifiants invalides"}
             
-            # ... (Ajouter les autres primitives ici plus tard)
+            #  autres primitives 
 
             conn.send(json.dumps(reponse).encode())
             

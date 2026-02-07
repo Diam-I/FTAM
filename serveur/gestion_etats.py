@@ -8,7 +8,7 @@ from commun.constantes import ETATS
 
 class MachineEtats:
     def __init__(self):
-        self.etat_actuel = "IDLE" # État initial [cite: 311, 657]
+        self.etat_actuel = "IDLE"
 
     def transitionner(self, nouvel_etat):
         if nouvel_etat in ETATS:
