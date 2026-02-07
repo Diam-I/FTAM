@@ -19,5 +19,26 @@ ERREUR_DROITS = 403
 ERREUR_NON_TROUVE = 404
 ERREUR_VERROU = 423 
 
+# Clés de structure (Pour éviter les fautes de frappe)
+K_PRIM = "primitive"
+K_PARA = "parametres"
+K_STAT = "statut"
+K_CODE = "code"
+K_MESS = "message"
+
 # États de la Machine à États
 ETATS = ["IDLE", "INITIALIZED", "SELECTED", "OPEN"] 
+
+# --- Structures de donnes echnger ---
+# Modèle de requête : {"primitive": "", "parametres": {}}
+REQ_STRUCT = {
+    "primitive": "",
+    "parametres": {}
+}
+
+# Modèle de réponse : {"statut": "", "code": 0, "message": ""}
+RES_STRUCT = {
+    "statut": "",
+    "code": 0,
+    "message": ""
+}

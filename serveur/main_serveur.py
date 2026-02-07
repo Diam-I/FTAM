@@ -1,19 +1,24 @@
 # =================================================================
-# GESTIONNAIRE DE CONNEXION CLIENT 
-# Rôle : Reçoit les requêtes JSON, les décode et utilise la 
-#        Machine à États pour valider et exécuter les primitives.
+# SERVEUR FTAM - GESTIONNAIRE DE CONNEXION
 # =================================================================
 import socket
 import threading
 import json
-import base64  # Pour envoyer les données binaires proprement en JSON
+import base64
 from commun.constantes import *
 from serveur.gestion_etats import MachineEtats
 from serveur.gestion_securite import authentifier
-from serveur.gestion_fichiers import verifier_existence, lire_bloc
+from serveur.gestion_fichiers import verifier_existence, lire_bloc, RACINE
+# Dictionnaire global pour la persistance des sessions 
+# Format : { "nom_utilisateur": {"fichier": "nom", "offset": 1024} }
+SESSIONS_RECOVERY = {}
 
 def gerer_client(conn, addr):
-    fsm = MachineEtats() # Initialisation à l'état IDLE 
+    """
+    Fonction exécutée dans un thread pour chaque client connecté.
+    Gère le cycle de vie de la session FTAM.
+    """
+    fsm = MachineEtats() 
     utilisateur_connecte = None
     fichier_selectionne = None
     offset_actuel = 0
@@ -24,77 +29,97 @@ def gerer_client(conn, addr):
             if not data: break
             
             requete = json.loads(data)
-            primitive = requete.get("primitive")
-            parametres = requete.get("parametres", {})
-            reponse = {"statut": "ERREUR", "code": 500, "message": "Erreur interne"}
+            primitive = requete.get(K_PRIM)
+            parametres = requete.get(K_PARA, {})
+            
+            # Réponse par défaut (Erreur)
+            reponse = {K_STAT: "ERREUR", K_CODE: 500, K_MESS: "Erreur serveur"}
 
             # --- Vérification de la Machine à États ---
             if not fsm.peut_executer(primitive):
-                reponse = {"statut": "ERREUR", "code": ERREUR_DROITS, "message": f"Action {primitive} interdite dans l'état {fsm.etat_actuel}"}
+                reponse.update({K_CODE: ERREUR_DROITS, K_MESS: f"Action interdite en l'état {fsm.etat_actuel}"})
             
             # --- Traitement des Primitives ---
             elif primitive == F_INITIALIZE:
+                """Initialise la session et authentifie l'utilisateur."""
                 role = authentifier(parametres.get("user"), parametres.get("mdp"))
                 if role:
-                    fsm.transitionner("INITIALIZED") # Passage à l'état INITIALIZED [cite: 90, 436]
+                    fsm.transitionner("INITIALIZED") # [cite: 90, 436]
                     utilisateur_connecte = parametres.get("user")
-                    reponse = {"statut": "SUCCÈS", "code": SUCCES, "role": role}
+                    reponse.update({K_STAT: "SUCCÈS", K_CODE: SUCCES, K_MESS: "Authentifié", "role": role})
                 else:
-                    reponse = {"statut": "ERREUR", "code": ERREUR_AUTH, "message": "Identifiants invalides"}
+                    reponse.update({K_CODE: ERREUR_AUTH, K_MESS: "Identifiants invalides"})
 
             elif primitive == F_SELECT:
+                """Sélectionne un fichier ou liste le répertoire."""
                 nom_f = parametres.get("nom")
-                
-                # Si le client demande ".", on liste le contenu du répertoire de stockage
-                if nom_f == ".":
+                if nom_f == ".": # Listage du répertoire
                     try:
                         from os import listdir
-                        from serveur.gestion_fichiers import RACINE
-                        
-                        fichiers = listdir(RACINE) # Récupère la liste des fichiers réels
-                        fsm.transitionner("SELECTED")
-                        reponse = {
-                            "statut": "SUCCÈS", 
-                            "code": SUCCES, 
-                            "fichiers": fichiers # On renvoie la liste à Amina
-                        }
+                        reponse.update({K_STAT: "SUCCÈS", K_CODE: SUCCES, "fichiers": listdir(RACINE)})
                     except Exception as e:
-                        reponse = {"statut": "ERREUR", "code": 500, "message": str(e)}
-                        
-                # Si c'est un nom de fichier précis, on vérifie son existence
+                        reponse.update({K_MESS: str(e)})
                 elif verifier_existence(nom_f):
                     fichier_selectionne = nom_f
-                    fsm.transitionner("SELECTED")
-                    reponse = {"statut": "SUCCÈS", "code": SUCCES, "fichier": nom_f}
+                    fsm.transitionner("SELECTED") # [cite: 92, 438]
+                    reponse.update({K_STAT: "SUCCÈS", K_CODE: SUCCES, K_MESS: f"Fichier {nom_f} sélectionné"})
                 else:
-                    reponse = {"statut": "ERREUR", "code": ERREUR_NON_TROUVE, "message": "Fichier absent"}
-
+                    reponse.update({K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"})
 
             elif primitive == F_OPEN:
-                # Mode lecture ou écriture spécifié par le client [cite: 93, 439]
-                fsm.transitionner("OPEN") # Passage à l'état OPEN [cite: 94, 440]
-                offset_actuel = 0 # Réinitialisation pour une nouvelle lecture
-                reponse = {"statut": "SUCCÈS", "code": SUCCES, "message": f"Fichier {fichier_selectionne} prêt"}
+                """Prépare le fichier pour le transfert."""
+                fsm.transitionner("OPEN") # [cite: 94, 440]
+                offset_actuel = 0
+                reponse.update({K_STAT: "SUCCÈS", K_CODE: SUCCES, K_MESS: "Fichier ouvert"})
 
+        
             elif primitive == F_READ:
-                # Lecture par bloc de 1024 octets [cite: 101, 450]
+                """
+                Envoie les données par blocs et sauvegarde l'offset pour le Recovery.
+                """
                 try:
-                    contenu_binaire = lire_bloc(fichier_selectionne, offset_actuel, TAILLE_BLOC)
-                    if contenu_binaire:
-                        # Encodage en Base64 car le JSON ne supporte pas le binaire pur
-                        donnees_encodees = base64.b64encode(contenu_binaire).decode('utf-8')
-                        offset_actuel += len(contenu_binaire)
-                        reponse = {"statut": "DONNÉES", "code": SUCCES, "data": donnees_encodees}
+                    contenu = lire_bloc(fichier_selectionne, offset_actuel, TAILLE_BLOC) # [cite: 101, 450]
+                    if contenu:
+                        # Envoi en Base64 pour compatibilité JSON
+                        donnees_b64 = base64.b64encode(contenu).decode('utf-8')
+                        offset_actuel += len(contenu)
+                        SESSIONS_RECOVERY[utilisateur_connecte] = {
+                            "fichier": fichier_selectionne,
+                            "offset": offset_actuel
+                        }
+                        reponse.update({K_STAT: "DONNÉES", K_CODE: SUCCES, "data": donnees_b64})
                     else:
-                        reponse = {"statut": "FIN", "code": SUCCES, "message": "Fin du transfert"}
+                        if utilisateur_connecte in SESSIONS_RECOVERY:
+                            del SESSIONS_RECOVERY[utilisateur_connecte]
+                        reponse.update({K_STAT: "FIN", K_CODE: SUCCES, K_MESS: "Transfert terminé"})
                 except Exception as e:
-                    reponse = {"statut": "ERREUR", "code": 500, "message": str(e)}
+                    reponse.update({K_MESS: f"Erreur lecture : {str(e)}"})
 
             elif primitive == F_TERMINATE:
+                """Ferme proprement la session."""
                 fsm.transitionner("IDLE")
-                reponse = {"statut": "SUCCÈS", "code": SUCCES, "message": "Session terminée"}
+                reponse.update({K_STAT: "SUCCÈS", K_CODE: SUCCES, K_MESS: "Déconnexion"})
                 conn.send(json.dumps(reponse).encode())
-                break # On sort de la boucle pour fermer la socket
+                break
+
+            elif primitive == F_RECOVER:
+                """
+                Restaure le contexte de transfert après une coupure.
+                Vérifie si une session précédente existe pour cet utilisateur.
+                """
+                if utilisateur_connecte in SESSIONS_RECOVERY:
+                    contexte = SESSIONS_RECOVERY[utilisateur_connecte]
+                    fichier_selectionne = contexte["fichier"]
+                    offset_actuel = contexte["offset"]
+                    fsm.transitionner("OPEN") # On revient directement en état ouvert
+                    reponse.update({
+                        K_STAT: "SUCCÈS", 
+                        K_CODE: SUCCES, 
+                        K_MESS: f"Reprise de {fichier_selectionne} à l'offset {offset_actuel}"
+                    })
+                else:
+                    reponse.update({K_CODE: ERREUR_NON_TROUVE, K_MESS: "Aucun contexte de reprise trouvé"})
+
 
             conn.send(json.dumps(reponse).encode())
             
@@ -104,14 +129,13 @@ def gerer_client(conn, addr):
     conn.close()
 
 def demarrer_serveur():
-    # Création de la socket TCP/IP conforme au schéma réseau 
+    """Lance le serveur TCP et écoute les connexions entrantes."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((ADRESSE_ECOUTE, PORT_DEFAUT))
         s.listen()
-        print(f"[SERVEUR] En attente sur le port {PORT_DEFAUT}...")
+        print(f"[SERVEUR] Écoute sur le port {PORT_DEFAUT}...")
         while True:
             conn, addr = s.accept()
-            # Un thread par client pour gérer la concurrence
             threading.Thread(target=gerer_client, args=(conn, addr)).start()
 
 if __name__ == "__main__":

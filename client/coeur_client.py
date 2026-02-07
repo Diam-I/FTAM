@@ -1,69 +1,80 @@
+# =================================================================
+# CLIENT FTAM - COEUR LOGIQUE
+# =================================================================
 import socket
 import json
 import os
+import base64
 from commun.constantes import *
 
-
 class ClientFTAM:
+    """
+    Classe implémentant la logique métier du protocole FTAM côté client.
+    Elle encapsule les méthodes de connexion, de transfert et de gestion de session.
+    """
     def __init__(self):
+        """Initialise un client avec une socket inactive et un état de session vierge."""
         self.socket = None
         self.est_connecte = False
-        self.session_id = None
 
     def envoyer_requete(self, primitive, params=None):
-        # Envoie une PDU au format JSON et attend la réponse du serveur #
         if not self.socket:
-            return {"statut": "ERREUR", "message": "Non connecté"}
-
+            print("Erreur : Non connecté.")
+            return None
         try:
-            requete = {"primitive": primitive, "parametres": params or {}}
-            self.socket.sendall(json.dumps(requete).encode())
-
-            # Attente de la réponse du serveur #
+            requete = {K_PRIM: primitive, K_PARA: params or {}}
+            self.socket.send(json.dumps(requete).encode())
+            
             reponse_data = self.socket.recv(4096).decode()
-            return json.loads(reponse_data)
+            reponse = json.loads(reponse_data)
+            return reponse
         except Exception as e:
-            return {"statut": "ERREUR", "message": str(e)}
+            print(f"Erreur : {e}")
+            return None
 
     def connecter(self, ip, user, mdp):
-        # Tente de se connecter au serveur et d'initialiser la session #
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((ip, PORT_DEFAUT))
 
             res = self.envoyer_requete(F_INITIALIZE, {"user": user, "mdp": mdp})
-            if res.get("statut") == "SUCCÈS":
+            if res and res.get(K_CODE) == SUCCES:
                 self.est_connecte = True
-                self.session_id = res.get("session_id")
+                print("Connexion réussie.")
                 return True
         except:
             self.socket = None
         return False
 
     def telecharger(self, nom_fichier, offset=0):
-        # Sélection et ouverture du fichier #
+        # 1. Sélection et Ouverture 
         self.envoyer_requete(F_SELECT, {"nom": nom_fichier})
         self.envoyer_requete(F_OPEN, {"mode": "lecture"})
 
-        # Si on reprend après un crash, on utilise F-RECOVER #
+        # 2. Gestion de la reprise sur incident
         if offset > 0:
             self.envoyer_requete(F_RECOVER, {"offset": offset})
 
-        # Réception des données #
-        with open(f"telechargements/{nom_fichier}", "ab") as f:
+        # 3. Réception et Décodage des données 
+        if not os.path.exists("telechargements"):
+            os.makedirs("telechargements")
+
+        with open(f"telechargements/{nom_fichier}", "wb") as f:
             while True:
-                res = self.envoyer_requete("F-READ-DATA")
-                if res.get("statut") == "TRANSFER_END":
+                res = self.envoyer_requete(F_READ)
+                
+                if res.get(K_STAT) == "FIN":
+                    print("Téléchargement fini.")
+                    break
+                
+                if res.get(K_STAT) == "DONNÉES":
+                    donnees_binaires = base64.b64decode(res.get("data"))
+                    f.write(donnees_binaires)
+                else:
+                    print(f"Erreur : {res.get(K_MESS)}")
                     break
 
-                # On écrit le bloc binaire reçu #
-                bloc_data = res.get("data").encode("latin-1")
-                f.write(bloc_data)
-
-        print(f"Transfert de {nom_fichier} terminé.")
-
     def deconnecter(self):
-        # Finir la session et fermer la connexion #
         if self.socket:
             self.envoyer_requete(F_TERMINATE)
             self.socket.close()
