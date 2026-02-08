@@ -5,7 +5,7 @@
 #        les actions sensibles comme la suppression (F-DELETE).
 # =================================================================
 
-# Base de données simulée pour le projet
+# Base de données simulée 
 UTILISATEURS = {
     "salia": {"mdp": "stri2026", "role": "proprietaire"},
     "amina": {"mdp": "ftam2026", "role": "proprietaire"},

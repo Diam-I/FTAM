@@ -24,6 +24,7 @@ def gerer_client(conn, addr):
     fsm = MachineEtats()
     utilisateur_connecte = None
     fichier_selectionne = None
+    role_user = None #
     offset_actuel = 0
 
     while True:
@@ -36,7 +37,7 @@ def gerer_client(conn, addr):
             primitive = requete.get(K_PRIM)
             parametres = requete.get(K_PARA, {})
 
-            # Réponse par défaut (Erreur)
+            # Réponse par défaut
             reponse = {K_STAT: "ERREUR", K_CODE: 500, K_MESS: "Erreur serveur"}
 
             # --- Vérification de la Machine à États ---
@@ -53,8 +54,11 @@ def gerer_client(conn, addr):
                 """Initialise la session et authentifie l'utilisateur."""
                 role = authentifier(parametres.get("user"), parametres.get("mdp"))
                 if role:
-                    fsm.transitionner("INITIALIZED")  # [cite: 90, 436]
+                    fsm.transitionner("INITIALIZED") 
+                    # sauvegarde du role
+                    role_user = role 
                     utilisateur_connecte = parametres.get("user")
+                    print(f"[\033[94mAUTH\033[0m] {utilisateur_connecte} connecté (Rôle: {role})")
                     reponse.update(
                         {
                             K_STAT: "SUCCÈS",
@@ -71,10 +75,10 @@ def gerer_client(conn, addr):
             elif primitive == F_SELECT:
                 """Sélectionne un fichier ou liste le répertoire."""
                 nom_f = parametres.get("nom")
-                if nom_f == ".":  # Listage du répertoire
+                if nom_f == ".":  
                     try:
                         from os import listdir
-
+                        print(f"[\033[93mLIST\033[0m] Envoi de la liste des fichiers à {utilisateur_connecte}")
                         reponse.update(
                             {
                                 K_STAT: "SUCCÈS",
@@ -85,8 +89,9 @@ def gerer_client(conn, addr):
                     except Exception as e:
                         reponse.update({K_MESS: str(e)})
                 elif verifier_existence(nom_f):
+                    print(f"[\033[93mSEL \033[0m] Fichier '{nom_f}' sélectionné par {utilisateur_connecte}")
                     fichier_selectionne = nom_f
-                    fsm.transitionner("SELECTED")  # [cite: 92, 438]
+                    fsm.transitionner("SELECTED")  
                     reponse.update(
                         {
                             K_STAT: "SUCCÈS",
@@ -101,7 +106,8 @@ def gerer_client(conn, addr):
 
             elif primitive == F_OPEN:
                 """Prépare le fichier pour le transfert."""
-                fsm.transitionner("OPEN")  # [cite: 94, 440]
+                print(f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}")
+                fsm.transitionner("OPEN") 
                 offset_actuel = 0
                 reponse.update(
                     {K_STAT: "SUCCÈS", K_CODE: SUCCES, K_MESS: "Fichier ouvert"}
@@ -112,11 +118,11 @@ def gerer_client(conn, addr):
                 Envoie les données par blocs et sauvegarde l'offset pour le Recovery.
                 """
                 try:
+                    print(f"[\033[92mREAD\033[0m] Envoi bloc pour {fichier_selectionne} (Offset: {offset_actuel})", end="\r")
                     contenu = lire_bloc(
                         fichier_selectionne, offset_actuel, TAILLE_BLOC
-                    )  # [cite: 101, 450]
+                    )  
                     if contenu:
-                        # Envoi en Base64 pour compatibilité JSON
                         donnees_b64 = base64.b64encode(contenu).decode("utf-8")
                         offset_actuel += len(contenu)
                         SESSIONS_RECOVERY[utilisateur_connecte] = {
@@ -129,8 +135,9 @@ def gerer_client(conn, addr):
                         import time
 
                         #### Commenter pour accélérer les tests, mais à réactiver pour tester la reprise sur incident ####
-                        time.sleep(0.5)
+                        time.sleep(0.05)
                     else:
+                        print(f"\n[\033[92mFIN\033[0m] Transfert terminé pour {fichier_selectionne}")
                         if utilisateur_connecte in SESSIONS_RECOVERY:
                             del SESSIONS_RECOVERY[utilisateur_connecte]
                         reponse.update(
@@ -154,10 +161,11 @@ def gerer_client(conn, addr):
                 Vérifie si une session précédente existe pour cet utilisateur.
                 """
                 if utilisateur_connecte in SESSIONS_RECOVERY:
+                    print(f"[\033[35mRECO\033[0m] Demande de reprise pour {utilisateur_connecte} sur {fichier_selectionne}")
                     contexte = SESSIONS_RECOVERY[utilisateur_connecte]
                     fichier_selectionne = contexte["fichier"]
                     offset_actuel = contexte["offset"]
-                    fsm.transitionner("OPEN")  # On revient directement en état ouvert
+                    fsm.transitionner("OPEN") 
                     reponse.update(
                         {
                             K_STAT: "SUCCÈS",
@@ -175,18 +183,13 @@ def gerer_client(conn, addr):
 
             elif primitive == F_DELETE:
                 """Supprime un fichier (fonctionnalité réservée aux propriétaires/admins)."""
-                # Le rôle doit correspondre à "proprietaire" selon votre gestion_securite.py
-                role = authentifier(utilisateur_connecte, None)
-
-                # Vérification de l'état (doit être authentifié) et du rôle
-                if fsm.etat_actuel != "IDLE" and role == "proprietaire":
+                # Vérification de l'état et du rôle
+                if fsm.etat_actuel != "IDLE" and role_user in ["proprietaire", "admin"]:
                     nom_f = parametres.get("nom")
-
+                    print(f"[\033[91mDEL \033[0m] Suppression de '{nom_f}' demandée par {utilisateur_connecte}")
                     try:
                         import os
-
                         chemin = os.path.join(RACINE, nom_f)
-
                         if verifier_existence(nom_f):
                             os.remove(chemin)
                             reponse.update(
@@ -211,7 +214,7 @@ def gerer_client(conn, addr):
                             {K_CODE: 500, K_MESS: f"Erreur système: {str(e)}"}
                         )
                 else:
-                    # Gestion du scénario d'échec (Erreur 403)
+                    # Gestion du scénario d'échec 
                     reponse.update(
                         {
                             K_CODE: ERREUR_DROITS,
@@ -219,7 +222,7 @@ def gerer_client(conn, addr):
                         }
                     )
             conn.send(json.dumps(reponse).encode())
-
+            print("\n\n + + + + ============== + + + +\n\n")
         except Exception as e:
             print(f"[ERREUR] {e} avec {addr}")
             break
@@ -227,15 +230,36 @@ def gerer_client(conn, addr):
 
 
 def demarrer_serveur():
-    """Lance le serveur TCP et écoute les connexions entrantes."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((ADRESSE_ECOUTE, PORT_DEFAUT))
-        s.listen()
-        print(f"[SERVEUR] Écoute sur le port {PORT_DEFAUT}...")
-        while True:
-            conn, addr = s.accept()
-            threading.Thread(target=gerer_client, args=(conn, addr)).start()
+    """Lance le serveur TCP avec un arrêt contrôlé."""
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        server_socket.bind((ADRESSE_ECOUTE, PORT_DEFAUT))
+        server_socket.listen()  
+        print("\033[94m" + "="*40)
+        print("   SERVEUR FTAM Lancé...")
+        print(f"   Écoute sur : {ADRESSE_ECOUTE}:{PORT_DEFAUT}")
+        print("="*40 + "\033[0m")
+        print("Tapez 'QUIT' et appuyez sur Entrée pour arrêter le serveur.\n")
+        def accepter_clients():
+            while True:
+                try:
+                    conn, addr = server_socket.accept()
+                    threading.Thread(target=gerer_client, args=(conn, addr), daemon=True).start()
+                except:
+                    break
 
+        thread_accept = threading.Thread(target=accepter_clients, daemon=True)
+        thread_accept.start()
+        while True:
+            commande = input().strip().upper()
+            if commande == "QUIT":
+                print("\033[91mArrêt du serveur en cours...\033[0m")
+                server_socket.close()
+                break
+
+    except Exception as e:
+        print(f"Erreur au démarrage : {e}")
 
 if __name__ == "__main__":
     demarrer_serveur()

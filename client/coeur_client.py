@@ -51,6 +51,8 @@ class ClientFTAM:
             self.etat_actuel = "SELECTED"
         elif primitive == F_OPEN:
             self.etat_actuel = "OPEN"
+        elif primitive == F_READ:
+            self.etat_actuel = "SELECTED"
         elif primitive == F_TERMINATE:
             self.etat_actuel = "IDLE"
 
@@ -65,7 +67,7 @@ class ClientFTAM:
                 self.role = res.get("role")
                 self.est_connecte = True
                 self.utilisateur = utilisateur
-                return {"succes": f"Connecté en tant que {utilisateur}"}
+                return {"succes": f"Connecté avec succès en tant que {utilisateur} ({self.role})"}
             else:
                 self.socket.close()
                 self.socket = None
@@ -134,3 +136,12 @@ class ClientFTAM:
         self.socket = None
         self.est_connecte = False
         self.etat_actuel = "IDLE"
+        print(f"[Info] Fermeture de la session cliente .....")
+
+    def supprimer_fichier(self, nom_f):
+            """Demande la suppression d'un fichier sur le serveur."""
+            res = self.envoyer_requete(F_DELETE, {"nom": nom_f})
+            if res.get(K_CODE) == SUCCES:
+                return {"succes": res.get(K_MESS)}
+            else:
+                return {"erreur": res.get(K_MESS)}
