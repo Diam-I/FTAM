@@ -6,7 +6,7 @@
 # =================================================================
 import os
 
-# Dossier racine isolé pour le stockage serveur
+# Dossier racine 
 RACINE = os.path.abspath("./serveur/stockage/") 
 
 def verifier_existence(nom):
@@ -24,7 +24,7 @@ def lire_bloc(nom, offset, taille=1024):
         raise PermissionError("Accès interdit hors du stockage sécurisé")
     try:
         with open(chemin_complet, "rb") as f:
-            f.seek(offset) # Crucial pour le F-RECOVER
+            f.seek(offset) # Pour le F-RECOVER
             return f.read(taille)
     except FileNotFoundError:
         return None

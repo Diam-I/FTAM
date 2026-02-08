@@ -6,6 +6,7 @@ F_READ = "F-READ"
 F_WRITE = "F-WRITE"
 F_RECOVER = "F-RECOVER"
 F_TERMINATE = "F-TERMINATE"
+F_DELETE = "F-DELETE"
 
 # --- Configuration Réseau ---
 PORT_DEFAUT = 2121  
