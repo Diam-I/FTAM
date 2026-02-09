@@ -24,7 +24,7 @@ def gerer_client(conn, addr):
     fsm = MachineEtats()
     utilisateur_connecte = None
     fichier_selectionne = None
-    role_user = None #
+    role_user = None  #
     offset_actuel = 0
 
     while True:
@@ -54,11 +54,13 @@ def gerer_client(conn, addr):
                 """Initialise la session et authentifie l'utilisateur."""
                 role = authentifier(parametres.get("user"), parametres.get("mdp"))
                 if role:
-                    fsm.transitionner("INITIALIZED") 
+                    fsm.transitionner("INITIALIZED")
                     # sauvegarde du role
-                    role_user = role 
+                    role_user = role
                     utilisateur_connecte = parametres.get("user")
-                    print(f"[\033[94mAUTH\033[0m] {utilisateur_connecte} connecté (Rôle: {role})")
+                    print(
+                        f"[\033[94mAUTH\033[0m] {utilisateur_connecte} connecté (Rôle: {role})"
+                    )
                     reponse.update(
                         {
                             K_STAT: "SUCCÈS",
@@ -75,10 +77,13 @@ def gerer_client(conn, addr):
             elif primitive == F_SELECT:
                 """Sélectionne un fichier ou liste le répertoire."""
                 nom_f = parametres.get("nom")
-                if nom_f == ".":  
+                if nom_f == ".":
                     try:
                         from os import listdir
-                        print(f"[\033[93mLIST\033[0m] Envoi de la liste des fichiers à {utilisateur_connecte}")
+
+                        print(
+                            f"[\033[93mLIST\033[0m] Envoi de la liste des fichiers à {utilisateur_connecte}"
+                        )
                         reponse.update(
                             {
                                 K_STAT: "SUCCÈS",
@@ -89,9 +94,11 @@ def gerer_client(conn, addr):
                     except Exception as e:
                         reponse.update({K_MESS: str(e)})
                 elif verifier_existence(nom_f):
-                    print(f"[\033[93mSEL \033[0m] Fichier '{nom_f}' sélectionné par {utilisateur_connecte}")
+                    print(
+                        f"[\033[93mSEL \033[0m] Fichier '{nom_f}' sélectionné par {utilisateur_connecte}"
+                    )
                     fichier_selectionne = nom_f
-                    fsm.transitionner("SELECTED")  
+                    fsm.transitionner("SELECTED")
                     reponse.update(
                         {
                             K_STAT: "SUCCÈS",
@@ -106,11 +113,19 @@ def gerer_client(conn, addr):
 
             elif primitive == F_OPEN:
                 """Prépare le fichier pour le transfert."""
-                print(f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}")
-                fsm.transitionner("OPEN") 
+                print(
+                    f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}"
+                )
+                fsm.transitionner("OPEN")
                 offset_actuel = 0
+                taille = os.path.getsize(os.path.join(RACINE, fichier_selectionne))
                 reponse.update(
-                    {K_STAT: "SUCCÈS", K_CODE: SUCCES, K_MESS: "Fichier ouvert"}
+                    {
+                        K_STAT: "SUCCÈS",
+                        K_CODE: SUCCES,
+                        K_MESS: "Fichier ouvert",
+                        "taille": taille,
+                    }
                 )
 
             elif primitive == F_READ:
@@ -118,10 +133,11 @@ def gerer_client(conn, addr):
                 Envoie les données par blocs et sauvegarde l'offset pour le Recovery.
                 """
                 try:
-                    print(f"[\033[92mREAD\033[0m] Envoi bloc pour {fichier_selectionne} (Offset: {offset_actuel})", end="\r")
-                    contenu = lire_bloc(
-                        fichier_selectionne, offset_actuel, TAILLE_BLOC
-                    )  
+                    print(
+                        f"[\033[92mREAD\033[0m] Envoi bloc pour {fichier_selectionne} (Offset: {offset_actuel})",
+                        end="\r",
+                    )
+                    contenu = lire_bloc(fichier_selectionne, offset_actuel, TAILLE_BLOC)
                     if contenu:
                         donnees_b64 = base64.b64encode(contenu).decode("utf-8")
                         offset_actuel += len(contenu)
@@ -137,7 +153,9 @@ def gerer_client(conn, addr):
                         #### Commenter pour accélérer les tests, mais à réactiver pour tester la reprise sur incident ####
                         time.sleep(0.05)
                     else:
-                        print(f"\n[\033[92mFIN\033[0m] Transfert terminé pour {fichier_selectionne}")
+                        print(
+                            f"\n[\033[92mFIN\033[0m] Transfert terminé pour {fichier_selectionne}"
+                        )
                         if utilisateur_connecte in SESSIONS_RECOVERY:
                             del SESSIONS_RECOVERY[utilisateur_connecte]
                         reponse.update(
@@ -161,11 +179,13 @@ def gerer_client(conn, addr):
                 Vérifie si une session précédente existe pour cet utilisateur.
                 """
                 if utilisateur_connecte in SESSIONS_RECOVERY:
-                    print(f"[\033[35mRECO\033[0m] Demande de reprise pour {utilisateur_connecte} sur {fichier_selectionne}")
+                    print(
+                        f"[\033[35mRECO\033[0m] Demande de reprise pour {utilisateur_connecte} sur {fichier_selectionne}"
+                    )
                     contexte = SESSIONS_RECOVERY[utilisateur_connecte]
                     fichier_selectionne = contexte["fichier"]
                     offset_actuel = contexte["offset"]
-                    fsm.transitionner("OPEN") 
+                    fsm.transitionner("OPEN")
                     reponse.update(
                         {
                             K_STAT: "SUCCÈS",
@@ -186,9 +206,11 @@ def gerer_client(conn, addr):
                 # Vérification de l'état et du rôle
                 if fsm.etat_actuel != "IDLE" and role_user in ["proprietaire", "admin"]:
                     nom_f = parametres.get("nom")
-                    print(f"[\033[91mDEL \033[0m] Suppression de '{nom_f}' demandée par {utilisateur_connecte}")
+                    print(
+                        f"[\033[91mDEL \033[0m] Suppression de '{nom_f}' demandée par {utilisateur_connecte}"
+                    )
                     try:
-                        import os
+
                         chemin = os.path.join(RACINE, nom_f)
                         if verifier_existence(nom_f):
                             os.remove(chemin)
@@ -214,7 +236,7 @@ def gerer_client(conn, addr):
                             {K_CODE: 500, K_MESS: f"Erreur système: {str(e)}"}
                         )
                 else:
-                    # Gestion du scénario d'échec 
+                    # Gestion du scénario d'échec
                     reponse.update(
                         {
                             K_CODE: ERREUR_DROITS,
@@ -235,17 +257,20 @@ def demarrer_serveur():
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         server_socket.bind((ADRESSE_ECOUTE, PORT_DEFAUT))
-        server_socket.listen()  
-        print("\033[94m" + "="*40)
+        server_socket.listen()
+        print("\033[94m" + "=" * 40)
         print("   SERVEUR FTAM Lancé...")
         print(f"   Écoute sur : {ADRESSE_ECOUTE}:{PORT_DEFAUT}")
-        print("="*40 + "\033[0m")
+        print("=" * 40 + "\033[0m")
         print("Tapez 'QUIT' et appuyez sur Entrée pour arrêter le serveur.\n")
+
         def accepter_clients():
             while True:
                 try:
                     conn, addr = server_socket.accept()
-                    threading.Thread(target=gerer_client, args=(conn, addr), daemon=True).start()
+                    threading.Thread(
+                        target=gerer_client, args=(conn, addr), daemon=True
+                    ).start()
                 except:
                     break
 
@@ -260,6 +285,7 @@ def demarrer_serveur():
 
     except Exception as e:
         print(f"Erreur au démarrage : {e}")
+
 
 if __name__ == "__main__":
     demarrer_serveur()

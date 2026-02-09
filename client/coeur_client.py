@@ -67,7 +67,9 @@ class ClientFTAM:
                 self.role = res.get("role")
                 self.est_connecte = True
                 self.utilisateur = utilisateur
-                return {"succes": f"Connecté avec succès en tant que {utilisateur} ({self.role})"}
+                return {
+                    "succes": f"Connecté avec succès en tant que {utilisateur} ({self.role})"
+                }
             else:
                 self.socket.close()
                 self.socket = None
@@ -94,6 +96,7 @@ class ClientFTAM:
         res_open = self.envoyer_requete(F_OPEN)
         if not res_open or res_open.get(K_CODE) != SUCCES:
             return {"erreur": "Impossible d'ouvrir le fichier distant."}
+        self.taille_fichier = res_open.get("taille", 0)
 
         # Dossier utilisateur
         dossier_utilisateur = os.path.join("telechargements", self.utilisateur)
@@ -106,6 +109,7 @@ class ClientFTAM:
         with open(chemin_fichier, mode_ouverture) as f:
             if offset > 0:
                 f.seek(offset)
+            telecharge = offset
             while True:
                 res = self.envoyer_requete(F_READ)
                 if not res:
@@ -113,7 +117,17 @@ class ClientFTAM:
                 if res.get(K_STAT) == "DONNÉES":
                     bloc = base64.b64decode(res.get("data"))
                     f.write(bloc)
+                    telecharge += len(bloc)
+                    if self.taille_fichier > 0:
+                        pourcent = (telecharge / self.taille_fichier) * 100
+                        print(
+                            f"Téléchargé : {telecharge} / {self.taille_fichier} bytes ({pourcent:.2f}%)",
+                            end="\r",
+                        )
                 elif res.get(K_STAT) == "FIN":
+                    print(
+                        f"Téléchargement de '{nom_f}' terminé. Total : {telecharge} bytes."
+                    )
                     break
                 else:
                     return {"erreur": res.get(K_MESS)}
@@ -139,9 +153,9 @@ class ClientFTAM:
         print(f"[Info] Fermeture de la session cliente .....")
 
     def supprimer_fichier(self, nom_f):
-            """Demande la suppression d'un fichier sur le serveur."""
-            res = self.envoyer_requete(F_DELETE, {"nom": nom_f})
-            if res.get(K_CODE) == SUCCES:
-                return {"succes": res.get(K_MESS)}
-            else:
-                return {"erreur": res.get(K_MESS)}
+        """Demande la suppression d'un fichier sur le serveur."""
+        res = self.envoyer_requete(F_DELETE, {"nom": nom_f})
+        if res.get(K_CODE) == SUCCES:
+            return {"succes": res.get(K_MESS)}
+        else:
+            return {"erreur": res.get(K_MESS)}
