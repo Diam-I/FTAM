@@ -117,7 +117,7 @@ def gerer_client(conn, addr):
                     f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}"
                 )
                 fsm.transitionner("OPEN")
-                offset_actuel = 0
+                #####################offset_actuel = 0 ########################
                 taille = os.path.getsize(os.path.join(RACINE, fichier_selectionne))
                 reponse.update(
                     {
@@ -190,9 +190,12 @@ def gerer_client(conn, addr):
                         {
                             K_STAT: "SUCCÈS",
                             K_CODE: SUCCES,
-                            K_MESS: f"Reprise de {fichier_selectionne} à l'offset {offset_actuel}",
+                            "fichier": fichier_selectionne,
+                            "offset": offset_actuel,
+                            K_MESS: f"Reprise à l'offset {offset_actuel}",
                         }
                     )
+
                 else:
                     reponse.update(
                         {

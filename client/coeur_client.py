@@ -138,6 +138,8 @@ class ClientFTAM:
         res = self.envoyer_requete(F_RECOVER)
         if res.get(K_CODE) == SUCCES:
             offset = int(res.get("offset", 0))
+            print(f"[INFO] Reprise à partir de {offset} octets")
+
             return self.telecharger(nom_fichier, offset=offset)
         else:
             return {"erreur": res.get(K_MESS)}
