@@ -27,7 +27,7 @@ def main():
         if not client.est_connecte:
             print("1. Se connecter (F-INITIALIZE)")
             print("2. Quitter")
-            leave = "2" 
+            leave = "2"
         else:
             print("1. Lister les fichiers (F-SELECT)")
             print("2. Télécharger un fichier (F-READ)")
@@ -39,7 +39,7 @@ def main():
             else:
                 print("4. Quitter")
                 leave = "4"
-    
+
         opt = input("Choisissez une option : ").strip()
         if opt == leave:
             client.quitter()
@@ -53,7 +53,9 @@ def main():
                 telecharger(client)
             elif opt == "3":
                 reprendre_telechargement(client)
-            elif opt == "4" and (client.role == "admin" or client.role == "proprietaire"):
+            elif opt == "4" and (
+                client.role == "admin" or client.role == "proprietaire"
+            ):
                 supprimer_fichier(client)
             else:
                 print("Option invalide.")
@@ -105,12 +107,13 @@ def reprendre_telechargement(client):
     else:
         print(res["succes"])
 
+
 def supprimer_fichier(client):
     """Demande confirmation avant de supprimer un fichier distant."""
     nom = input("Nom du fichier à supprimer définitivement : ").strip()
     conf = input(f"Êtes-vous sûr de vouloir supprimer '{nom}' ? (o/n) : ").lower()
-    
-    if conf == 'o':
+
+    if conf == "o":
         res = client.supprimer_fichier(nom)
         if "erreur" in res:
             print(f"[ERREUR] {res['erreur']}")
@@ -118,6 +121,7 @@ def supprimer_fichier(client):
             print(f"[SUCCÈS] {res['succes']}")
     else:
         print("Suppression annulée.")
+
 
 if __name__ == "__main__":
     main()

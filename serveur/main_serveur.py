@@ -7,6 +7,7 @@ import threading
 import json
 import base64
 from commun.constantes import *
+from serveur.gestion_droits import peut_lire, peut_supprimer
 from serveur.gestion_etats import MachineEtats
 from serveur.gestion_securite import authentifier
 from serveur.gestion_fichiers import verifier_existence, lire_bloc, RACINE
@@ -84,28 +85,47 @@ def gerer_client(conn, addr):
                         print(
                             f"[\033[93mLIST\033[0m] Envoi de la liste des fichiers à {utilisateur_connecte}"
                         )
+                        # Filtrer les fichiers selon les droits de lecture
+                        tous_les_fichiers = listdir(RACINE)
+                        fichiers_accessibles = [
+                            f
+                            for f in tous_les_fichiers
+                            if peut_lire(utilisateur_connecte, f)
+                        ]
                         reponse.update(
                             {
                                 K_STAT: "SUCCÈS",
                                 K_CODE: SUCCES,
-                                "fichiers": listdir(RACINE),
+                                "fichiers": fichiers_accessibles,
                             }
                         )
                     except Exception as e:
                         reponse.update({K_MESS: str(e)})
                 elif verifier_existence(nom_f):
-                    print(
-                        f"[\033[93mSEL \033[0m] Fichier '{nom_f}' sélectionné par {utilisateur_connecte}"
-                    )
-                    fichier_selectionne = nom_f
-                    fsm.transitionner("SELECTED")
-                    reponse.update(
-                        {
-                            K_STAT: "SUCCÈS",
-                            K_CODE: SUCCES,
-                            K_MESS: f"Fichier {nom_f} sélectionné",
-                        }
-                    )
+                    if not peut_lire(utilisateur_connecte, nom_f):
+                        reponse.update(
+                            {
+                                K_CODE: ERREUR_DROITS,
+                                K_MESS: "Vous n'avez pas les droits de lecture sur ce fichier",
+                            }
+                        )
+                        conn.send(json.dumps(reponse).encode())
+                        continue
+
+                    else:
+                        print(
+                            f"[\033[93mSEL \033[0m] Fichier '{nom_f}' sélectionné par {utilisateur_connecte}"
+                        )
+                        fichier_selectionne = nom_f
+                        fsm.transitionner("SELECTED")
+                        reponse.update(
+                            {
+                                K_STAT: "SUCCÈS",
+                                K_CODE: SUCCES,
+                                K_MESS: f"Fichier {nom_f} sélectionné",
+                            }
+                        )
+
                 else:
                     reponse.update(
                         {K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"}
@@ -117,7 +137,7 @@ def gerer_client(conn, addr):
                     f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}"
                 )
                 fsm.transitionner("OPEN")
-                #####################offset_actuel = 0 ########################
+                ##################### offset_actuel = 0 ########################
                 taille = os.path.getsize(os.path.join(RACINE, fichier_selectionne))
                 reponse.update(
                     {
@@ -207,7 +227,7 @@ def gerer_client(conn, addr):
             elif primitive == F_DELETE:
                 """Supprime un fichier (fonctionnalité réservée aux propriétaires/admins)."""
                 # Vérification de l'état et du rôle
-                if fsm.etat_actuel != "IDLE" and role_user in ["proprietaire", "admin"]:
+                if fsm.etat_actuel != "IDLE":
                     nom_f = parametres.get("nom")
                     print(
                         f"[\033[91mDEL \033[0m] Suppression de '{nom_f}' demandée par {utilisateur_connecte}"
@@ -216,17 +236,27 @@ def gerer_client(conn, addr):
 
                         chemin = os.path.join(RACINE, nom_f)
                         if verifier_existence(nom_f):
-                            os.remove(chemin)
-                            reponse.update(
-                                {
-                                    K_STAT: "SUCCÈS",
-                                    K_CODE: SUCCES,
-                                    K_MESS: f"Fichier {nom_f} supprimé",
-                                }
-                            )
-                            print(
-                                f"[INFO] Fichier {nom_f} supprimé par {utilisateur_connecte}"
-                            )
+                            if not peut_supprimer(utilisateur_connecte, nom_f):
+                                reponse.update(
+                                    {
+                                        K_CODE: ERREUR_DROITS,
+                                        K_MESS: "Vous n'avez pas les droits de suppression sur ce fichier",
+                                    }
+                                )
+                                conn.send(json.dumps(reponse).encode())
+                                continue
+                            else:
+                                os.remove(chemin)
+                                reponse.update(
+                                    {
+                                        K_STAT: "SUCCÈS",
+                                        K_CODE: SUCCES,
+                                        K_MESS: f"Fichier {nom_f} supprimé",
+                                    }
+                                )
+                                print(
+                                    f"[INFO] Fichier {nom_f} supprimé par {utilisateur_connecte}"
+                                )
                         else:
                             reponse.update(
                                 {
