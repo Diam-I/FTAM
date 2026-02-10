@@ -1,30 +1,71 @@
 {
-  "BE_Interoperabilite_TRAORE_DIDANE.pdf": {
-    "owner": "salia",
-    "permissions": {
-      "read": ["salia", "amina", "invite"],
-      "delete": ["salia"]
+    "BE_Interoperabilite_TRAORE_DIDANE.pdf": {
+        "owner": "salia",
+        "permissions": {
+            "read": [
+                "salia",
+                "amina",
+                "invite"
+            ],
+            "delete": [
+                "salia"
+            ]
+        }
+    },
+    "network-basics.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "amina",
+                "salia"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "nix-commands.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "amina",
+                "salia"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "Cours1-QNAP.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "UPSSITECH.png": {
+        "permissions": {
+            "read": [
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "PaulSab.png": {
+        "permissions": {
+            "read": [
+                "salia",
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
     }
-  },
-  "network-basics.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["amina", "salia"],
-      "delete": ["amina"]
-    }
-  },
-  "nix-commands.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["amina", "salia"],
-      "delete": ["amina"]
-    }
-  },
-  "Cours1-QNAP.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["amina"],
-      "delete": ["amina"]
-    }
-  }
 }

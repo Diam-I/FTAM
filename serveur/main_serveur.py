@@ -8,7 +8,13 @@ import json
 import base64
 import time
 from commun.constantes import *
-from serveur.gestion_droits import peut_lire, peut_supprimer
+from serveur.gestion_droits import (
+    META_PATH,
+    charger_meta,
+    peut_lire,
+    peut_supprimer,
+    peut_ecrire,
+)
 from serveur.gestion_etats import MachineEtats
 from serveur.gestion_securite import authentifier
 from serveur.gestion_fichiers import verifier_existence, lire_bloc, RACINE
@@ -202,6 +208,137 @@ def gerer_client(conn, addr):
                 )
                 conn.send(json.dumps(reponse).encode())
                 break
+            elif primitive == F_WRITE:
+                """Fonctionnalité d'écriture (non implémentée dans ce projet, mais prévue pour l'extension future)."""
+                nom_f = parametres.get("nom")
+                data_b64 = parametres.get("data")
+                fin = parametres.get("fin", False)
+
+                if not nom_f:
+                    reponse.update({K_CODE: 400, K_MESS: "Nom de fichier manquant"})
+                else:
+                    chemin = os.path.join(RACINE, nom_f)
+
+                    # Crée le dossier RACINE si nécessaire
+                    os.makedirs(RACINE, exist_ok=True)
+
+                    # Vérifier les droits d'écriture
+                    if not peut_ecrire(utilisateur_connecte, nom_f):
+                        reponse.update(
+                            {K_CODE: ERREUR_DROITS, K_MESS: "Pas les droits d'écriture"}
+                        )
+                    else:
+                        # Verrouiller le fichier
+                        with VERROUS_LOCK:
+                            FICHIERS_VERROUS[nom_f] = True
+
+                        try:
+                            if data_b64:
+                                bloc = base64.b64decode(data_b64)
+                                mode = "ab" if os.path.exists(chemin) else "wb"
+                                with open(chemin, mode) as f:
+                                    f.write(bloc)
+
+                            # Si c'est le dernier bloc, déverrouiller et mettre à jour le meta
+                            if fin:
+                                with VERROUS_LOCK:
+                                    if nom_f in FICHIERS_VERROUS:
+                                        del FICHIERS_VERROUS[nom_f]
+
+                                # Mettre à jour les droits dans .meta.json
+                                meta = charger_meta()
+                                if nom_f not in meta:
+                                    # Récupérer les permissions depuis la requête (optionnel)
+                                    permissions_read = parametres.get(
+                                        "permissions_read", []
+                                    )
+                                    permissions_delete = parametres.get(
+                                        "permissions_delete", []
+                                    )
+
+                                    # Toujours ajouter le créateur aux deux listes
+                                    if utilisateur_connecte not in permissions_read:
+                                        permissions_read.append(utilisateur_connecte)
+                                    if utilisateur_connecte not in permissions_delete:
+                                        permissions_delete.append(utilisateur_connecte)
+
+                                    meta[nom_f] = {
+                                        "permissions": {
+                                            "read": permissions_read,
+                                            "delete": permissions_delete,
+                                        }
+                                    }
+                                with open(META_PATH, "w") as f:
+                                    json.dump(meta, f, indent=4)
+
+                            reponse.update(
+                                {
+                                    K_STAT: "SUCCÈS",
+                                    K_CODE: SUCCES,
+                                    K_MESS: (
+                                        "Bloc ajouté" if not fin else "Fichier uploadé"
+                                    ),
+                                }
+                            )
+                        except Exception as e:
+                            reponse.update(
+                                {K_CODE: 500, K_MESS: f"Erreur serveur: {str(e)}"}
+                            )
+
+            elif primitive == F_SET_PERMISSIONS:
+                """Permet au propriétaire de modifier les permissions d'un fichier."""
+                nom_f = parametres.get("nom")
+                permissions_read = parametres.get("permissions_read", [])
+                permissions_delete = parametres.get("permissions_delete", [])
+
+                if not nom_f:
+                    reponse.update({K_CODE: 400, K_MESS: "Nom de fichier manquant"})
+                elif not verifier_existence(nom_f):
+                    reponse.update(
+                        {K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"}
+                    )
+                else:
+                    # Vérifier que l'utilisateur est propriétaire (a les droits delete)
+                    if not peut_supprimer(utilisateur_connecte, nom_f):
+                        reponse.update(
+                            {
+                                K_CODE: ERREUR_DROITS,
+                                K_MESS: "Seul le propriétaire peut modifier les permissions",
+                            }
+                        )
+                    else:
+                        # Toujours inclure le propriétaire dans les permissions
+                        if utilisateur_connecte not in permissions_read:
+                            permissions_read.append(utilisateur_connecte)
+                        if utilisateur_connecte not in permissions_delete:
+                            permissions_delete.append(utilisateur_connecte)
+
+                        # Mettre à jour les permissions
+                        meta = charger_meta()
+                        if nom_f in meta:
+                            meta[nom_f]["permissions"]["read"] = permissions_read
+                            meta[nom_f]["permissions"]["delete"] = permissions_delete
+
+                            with open(META_PATH, "w") as f:
+                                json.dump(meta, f, indent=4)
+
+                            reponse.update(
+                                {
+                                    K_STAT: "SUCCÈS",
+                                    K_CODE: SUCCES,
+                                    K_MESS: f"Permissions mises à jour pour {nom_f}",
+                                }
+                            )
+                            print(
+                                f"[INFO] Permissions modifiées pour {nom_f} par {utilisateur_connecte}"
+                            )
+                        else:
+                            reponse.update(
+                                {
+                                    K_CODE: ERREUR_NON_TROUVE,
+                                    K_MESS: "Fichier non trouvé dans les métadonnées",
+                                }
+                            )
 
             elif primitive == F_RECOVER:
                 """

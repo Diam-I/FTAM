@@ -1,9 +1,21 @@
 # =================================================================
-# MACHINE À ÉTATS FINIS 
-# Rôle : Garantit la conformité au protocole FTAM en vérifiant 
-#        que les commandes sont envoyées dans le bon ordre 
+# MACHINE À ÉTATS FINIS
+# Rôle : Garantit la conformité au protocole FTAM en vérifiant
+#        que les commandes sont envoyées dans le bon ordre
 # =================================================================
-from commun.constantes import ETATS, F_INITIALIZE, F_SELECT, F_OPEN, F_READ, F_TERMINATE, F_RECOVER,F_DELETE
+from commun.constantes import (
+    ETATS,
+    F_INITIALIZE,
+    F_SELECT,
+    F_OPEN,
+    F_READ,
+    F_TERMINATE,
+    F_RECOVER,
+    F_DELETE,
+    F_WRITE,
+    F_SET_PERMISSIONS,
+)
+
 
 class MachineEtats:
     def __init__(self):
@@ -21,7 +33,7 @@ class MachineEtats:
         Respecte la hiérarchie : INITIALIZE -> SELECT -> OPEN -> READ [cite: 291, 625]
         """
         if primitive == F_INITIALIZE:
-            return self.etat_actuel == "IDLE" 
+            return self.etat_actuel == "IDLE"
 
         elif primitive == F_SELECT:
             return self.etat_actuel in ["INITIALIZED", "SELECTED", "OPEN"]
@@ -38,5 +50,9 @@ class MachineEtats:
         elif primitive == F_TERMINATE:
             return self.etat_actuel != "IDLE"
         elif primitive == F_DELETE:
+            return self.etat_actuel in ["INITIALIZED", "SELECTED"]
+        elif primitive == F_WRITE:
+            return self.etat_actuel == "INITIALIZED"
+        elif primitive == F_SET_PERMISSIONS:
             return self.etat_actuel in ["INITIALIZED", "SELECTED"]
         return False

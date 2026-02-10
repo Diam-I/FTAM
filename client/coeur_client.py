@@ -161,3 +161,70 @@ class ClientFTAM:
             return {"succes": res.get(K_MESS)}
         else:
             return {"erreur": res.get(K_MESS)}
+
+    def uploader(
+        self, chemin_local, nom_distant, permissions_read=None, permissions_delete=None
+    ):
+        """Upload d'un fichier local vers le serveur par blocs.
+
+        Args:
+            chemin_local: Chemin du fichier local à téléverser
+            nom_distant: Nom du fichier sur le serveur
+            permissions_read: Liste des utilisateurs ayant le droit de lecture (optionnel)
+            permissions_delete: Liste des utilisateurs ayant le droit de suppression (optionnel)
+        """
+        if not os.path.exists(chemin_local):
+            return {"erreur": f"Fichier local '{chemin_local}' introuvable"}
+
+        taille = os.path.getsize(chemin_local)
+        envoye = 0
+        with open(chemin_local, "rb") as f:
+            while bloc := f.read(TAILLE_BLOC):
+                bloc_b64 = base64.b64encode(bloc).decode("utf-8")
+                res = self.envoyer_requete(
+                    F_WRITE, {"nom": nom_distant, "data": bloc_b64}
+                )
+                if res.get(K_CODE) != SUCCES:
+                    return {"erreur": res.get(K_MESS)}
+                envoye += len(bloc)
+                pourcent = (envoye / taille) * 100
+                print(f"Upload : {envoye}/{taille} bytes ({pourcent:.2f}%)", end="\r")
+
+        # Envoyer le signal de fin avec les permissions
+        params_fin = {"nom": nom_distant, "fin": True}
+        if permissions_read is not None:
+            params_fin["permissions_read"] = permissions_read
+        if permissions_delete is not None:
+            params_fin["permissions_delete"] = permissions_delete
+
+        res_fin = self.envoyer_requete(F_WRITE, params_fin)
+        if res_fin.get(K_CODE) == SUCCES:
+            print(f"\nUpload de '{nom_distant}' terminé.")
+            return {"succes": f"Fichier '{nom_distant}' uploadé avec succès"}
+        else:
+            return {"erreur": res_fin.get(K_MESS)}
+
+    def set_permissions(
+        self, nom_fichier, permissions_read=None, permissions_delete=None
+    ):
+        """Modifie les permissions d'un fichier existant.
+
+        Args:
+            nom_fichier: Nom du fichier dont on veut modifier les permissions
+            permissions_read: Liste des utilisateurs ayant le droit de lecture
+            permissions_delete: Liste des utilisateurs ayant le droit de suppression
+        """
+        if permissions_read is None and permissions_delete is None:
+            return {"erreur": "Aucune permission spécifiée"}
+
+        params = {"nom": nom_fichier}
+        if permissions_read is not None:
+            params["permissions_read"] = permissions_read
+        if permissions_delete is not None:
+            params["permissions_delete"] = permissions_delete
+
+        res = self.envoyer_requete(F_SET_PERMISSIONS, params)
+        if res.get(K_CODE) == SUCCES:
+            return {"succes": res.get(K_MESS)}
+        else:
+            return {"erreur": res.get(K_MESS)}
