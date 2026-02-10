@@ -165,14 +165,7 @@ class ClientFTAM:
     def uploader(
         self, chemin_local, nom_distant, permissions_read=None, permissions_delete=None
     ):
-        """Upload d'un fichier local vers le serveur par blocs.
-
-        Args:
-            chemin_local: Chemin du fichier local à téléverser
-            nom_distant: Nom du fichier sur le serveur
-            permissions_read: Liste des utilisateurs ayant le droit de lecture (optionnel)
-            permissions_delete: Liste des utilisateurs ayant le droit de suppression (optionnel)
-        """
+        """Upload d'un fichier local vers le serveur par blocs."""
         if not os.path.exists(chemin_local):
             return {"erreur": f"Fichier local '{chemin_local}' introuvable"}
 
@@ -208,11 +201,7 @@ class ClientFTAM:
         self, nom_fichier, permissions_read=None, permissions_delete=None
     ):
         """Modifie les permissions d'un fichier existant.
-
-        Args:
-            nom_fichier: Nom du fichier dont on veut modifier les permissions
-            permissions_read: Liste des utilisateurs ayant le droit de lecture
-            permissions_delete: Liste des utilisateurs ayant le droit de suppression
+        Si aucune permission n'est spécifiée, retourne une erreur.
         """
         if permissions_read is None and permissions_delete is None:
             return {"erreur": "Aucune permission spécifiée"}

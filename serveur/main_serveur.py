@@ -263,10 +263,11 @@ def gerer_client(conn, addr):
                                         permissions_delete.append(utilisateur_connecte)
 
                                     meta[nom_f] = {
+                                        "owner": utilisateur_connecte,
                                         "permissions": {
                                             "read": permissions_read,
                                             "delete": permissions_delete,
-                                        }
+                                        },
                                     }
                                 with open(META_PATH, "w") as f:
                                     json.dump(meta, f, indent=4)
@@ -298,8 +299,16 @@ def gerer_client(conn, addr):
                         {K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"}
                     )
                 else:
-                    # Vérifier que l'utilisateur est propriétaire (a les droits delete)
-                    if not peut_supprimer(utilisateur_connecte, nom_f):
+                    # Vérifier que l'utilisateur est propriétaire (owner)
+                    meta = charger_meta()
+                    if nom_f not in meta:
+                        reponse.update(
+                            {
+                                K_CODE: ERREUR_NON_TROUVE,
+                                K_MESS: "Fichier non trouvé dans les métadonnées",
+                            }
+                        )
+                    elif meta[nom_f].get("owner") != utilisateur_connecte:
                         reponse.update(
                             {
                                 K_CODE: ERREUR_DROITS,
@@ -314,31 +323,22 @@ def gerer_client(conn, addr):
                             permissions_delete.append(utilisateur_connecte)
 
                         # Mettre à jour les permissions
-                        meta = charger_meta()
-                        if nom_f in meta:
-                            meta[nom_f]["permissions"]["read"] = permissions_read
-                            meta[nom_f]["permissions"]["delete"] = permissions_delete
+                        meta[nom_f]["permissions"]["read"] = permissions_read
+                        meta[nom_f]["permissions"]["delete"] = permissions_delete
 
-                            with open(META_PATH, "w") as f:
-                                json.dump(meta, f, indent=4)
+                        with open(META_PATH, "w") as f:
+                            json.dump(meta, f, indent=4)
 
-                            reponse.update(
-                                {
-                                    K_STAT: "SUCCÈS",
-                                    K_CODE: SUCCES,
-                                    K_MESS: f"Permissions mises à jour pour {nom_f}",
-                                }
-                            )
-                            print(
-                                f"[INFO] Permissions modifiées pour {nom_f} par {utilisateur_connecte}"
-                            )
-                        else:
-                            reponse.update(
-                                {
-                                    K_CODE: ERREUR_NON_TROUVE,
-                                    K_MESS: "Fichier non trouvé dans les métadonnées",
-                                }
-                            )
+                        reponse.update(
+                            {
+                                K_STAT: "SUCCÈS",
+                                K_CODE: SUCCES,
+                                K_MESS: f"Permissions mises à jour pour {nom_f}",
+                            }
+                        )
+                        print(
+                            f"[INFO] Permissions modifiées pour {nom_f} par {utilisateur_connecte}"
+                        )
 
             elif primitive == F_RECOVER:
                 """
