@@ -6,6 +6,7 @@ import socket
 import threading
 import json
 import base64
+import time
 from commun.constantes import *
 from serveur.gestion_droits import peut_lire, peut_supprimer
 from serveur.gestion_etats import MachineEtats
@@ -15,6 +16,11 @@ from serveur.gestion_fichiers import verifier_existence, lire_bloc, RACINE
 # Dictionnaire global pour la persistance des sessions
 # Format : { "nom_utilisateur": {"fichier": "nom", "offset": 1024} }
 SESSIONS_RECOVERY = {}
+
+# Dictionnaire global pour les verrous de fichiers
+# Format : { "nom_fichier": True/False }
+FICHIERS_VERROUS = {}
+VERROUS_LOCK = threading.Lock()  # Pour éviter les race conditions
 
 
 def gerer_client(conn, addr):
@@ -109,9 +115,6 @@ def gerer_client(conn, addr):
                                 K_MESS: "Vous n'avez pas les droits de lecture sur ce fichier",
                             }
                         )
-                        conn.send(json.dumps(reponse).encode())
-                        continue
-
                     else:
                         print(
                             f"[\033[93mSEL \033[0m] Fichier '{nom_f}' sélectionné par {utilisateur_connecte}"
@@ -137,6 +140,9 @@ def gerer_client(conn, addr):
                     f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}"
                 )
                 fsm.transitionner("OPEN")
+                # Verrouiller le fichier
+                with VERROUS_LOCK:
+                    FICHIERS_VERROUS[fichier_selectionne] = True
                 ##################### offset_actuel = 0 ########################
                 taille = os.path.getsize(os.path.join(RACINE, fichier_selectionne))
                 reponse.update(
@@ -168,7 +174,6 @@ def gerer_client(conn, addr):
                         reponse.update(
                             {K_STAT: "DONNÉES", K_CODE: SUCCES, "data": donnees_b64}
                         )
-                        import time
 
                         #### Commenter pour accélérer les tests, mais à réactiver pour tester la reprise sur incident ####
                         time.sleep(0.05)
@@ -178,6 +183,11 @@ def gerer_client(conn, addr):
                         )
                         if utilisateur_connecte in SESSIONS_RECOVERY:
                             del SESSIONS_RECOVERY[utilisateur_connecte]
+                        # Dévérouiller le fichier
+                        with VERROUS_LOCK:
+                            if fichier_selectionne in FICHIERS_VERROUS:
+                                del FICHIERS_VERROUS[fichier_selectionne]
+                        fsm.transitionner("SELECTED")
                         reponse.update(
                             {K_STAT: "FIN", K_CODE: SUCCES, K_MESS: "Transfert terminé"}
                         )
@@ -226,61 +236,66 @@ def gerer_client(conn, addr):
 
             elif primitive == F_DELETE:
                 """Supprime un fichier (fonctionnalité réservée aux propriétaires/admins)."""
-                # Vérification de l'état et du rôle
-                if fsm.etat_actuel != "IDLE":
-                    nom_f = parametres.get("nom")
-                    print(
-                        f"[\033[91mDEL \033[0m] Suppression de '{nom_f}' demandée par {utilisateur_connecte}"
-                    )
-                    try:
+                nom_f = parametres.get("nom")
+                print(
+                    f"[\033[91mDEL \033[0m] Suppression de '{nom_f}' demandée par {utilisateur_connecte}"
+                )
+                try:
+                    chemin = os.path.join(RACINE, nom_f)
+                    if verifier_existence(nom_f):
+                        # Vérifier si le fichier est verrouillé
+                        with VERROUS_LOCK:
+                            fichier_verrouille = (
+                                nom_f in FICHIERS_VERROUS and FICHIERS_VERROUS[nom_f]
+                            )
 
-                        chemin = os.path.join(RACINE, nom_f)
-                        if verifier_existence(nom_f):
-                            if not peut_supprimer(utilisateur_connecte, nom_f):
-                                reponse.update(
-                                    {
-                                        K_CODE: ERREUR_DROITS,
-                                        K_MESS: "Vous n'avez pas les droits de suppression sur ce fichier",
-                                    }
-                                )
-                                conn.send(json.dumps(reponse).encode())
-                                continue
-                            else:
-                                os.remove(chemin)
-                                reponse.update(
-                                    {
-                                        K_STAT: "SUCCÈS",
-                                        K_CODE: SUCCES,
-                                        K_MESS: f"Fichier {nom_f} supprimé",
-                                    }
-                                )
-                                print(
-                                    f"[INFO] Fichier {nom_f} supprimé par {utilisateur_connecte}"
-                                )
-                        else:
+                        if fichier_verrouille:
                             reponse.update(
                                 {
-                                    K_CODE: ERREUR_NON_TROUVE,
-                                    K_MESS: "Fichier introuvable",
+                                    K_CODE: ERREUR_VERROU,
+                                    K_MESS: "Le fichier est en cours de téléchargement et ne peut pas être supprimé",
                                 }
                             )
-                    except Exception as e:
+                        elif not peut_supprimer(utilisateur_connecte, nom_f):
+                            reponse.update(
+                                {
+                                    K_CODE: ERREUR_DROITS,
+                                    K_MESS: "Vous n'avez pas les droits de suppression sur ce fichier",
+                                }
+                            )
+                        else:
+                            os.remove(chemin)
+                            reponse.update(
+                                {
+                                    K_STAT: "SUCCÈS",
+                                    K_CODE: SUCCES,
+                                    K_MESS: f"Fichier {nom_f} supprimé",
+                                }
+                            )
+                            print(
+                                f"[INFO] Fichier {nom_f} supprimé par {utilisateur_connecte}"
+                            )
+                    else:
                         reponse.update(
-                            {K_CODE: 500, K_MESS: f"Erreur système: {str(e)}"}
+                            {
+                                K_CODE: ERREUR_NON_TROUVE,
+                                K_MESS: "Fichier introuvable",
+                            }
                         )
-                else:
-                    # Gestion du scénario d'échec
-                    reponse.update(
-                        {
-                            K_CODE: ERREUR_DROITS,
-                            K_MESS: "Action réservée aux propriétaires du fichier",
-                        }
-                    )
+                except Exception as e:
+                    reponse.update({K_CODE: 500, K_MESS: f"Erreur système: {str(e)}"})
             conn.send(json.dumps(reponse).encode())
             print("\n\n + + + + ============== + + + +\n\n")
         except Exception as e:
             print(f"[ERREUR] {e} avec {addr}")
             break
+
+    # Nettoyer les verrous en cas de déconnexion inopinée
+    if fichier_selectionne:
+        with VERROUS_LOCK:
+            if fichier_selectionne in FICHIERS_VERROUS:
+                del FICHIERS_VERROUS[fichier_selectionne]
+
     conn.close()
 
 
