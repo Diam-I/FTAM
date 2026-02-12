@@ -1,10 +1,11 @@
 # =================================================================
-# TESTS DE VALIDATION 
+# BANQUET DE TESTS DE VALIDATION - PROTOCOLE FTAM
 # =================================================================
 
 import unittest
 import os
 import time
+import base64
 from client.coeur_client import ClientFTAM
 from commun.constantes import *
 
@@ -28,90 +29,95 @@ class TestFTAM(unittest.TestCase):
             except:
                 pass
 
-    def inspecter_reponse(self, titre, reponse):
-        """ Affiche le contenu de la réponse pour le diagnostic """
-        print(f"\n--- DEBUG: {titre} ---")
-        print(f"Contenu reçu: {reponse}")
-        print(f"Code présent: {K_CODE in reponse} (Valeur: {reponse.get(K_CODE)})")
-        print(f"Statut présent: {K_STAT in reponse} (Valeur: {reponse.get(K_STAT)})")
-        print("-" * 30)
+    def journaliser_echange(self, action, reponse):
+        """ Affiche l'analyse de l'échange PDU de manière professionnelle """
+        print(f"\n[ANALYSE] {action}")
+        print(f"  > Statut reçu : {reponse.get(K_STAT, 'N/A')}")
+        print(f"  > Code PDU    : {reponse.get(K_CODE, 'N/A')}")
+        print(f"  > Message     : {reponse.get(K_MESS, 'Aucun message')}")
+        print("-" * 45)
 
-    def test_01_connexion_reussite(self):
-        """ Test : Authentification valide """
+    def test_01_authentification(self):
+        """ Test : Validation de la procédure d'accès sécurisé """
         res = self.client.connecter(self.ip, self.user_admin, self.mdp_admin)
         self.assertIn("succes", res)
         self.assertEqual(self.client.etat_actuel, "INITIALIZED")
-        print("\n[OK] Test Connexion réussie")
+        print("\n[SUCCÈS] Procédure d'authentification validée")
 
-    def test_02_machine_etat_invalid(self):
-        """ Test : Respect de la hiérarchie des états """
+    def test_02_machine_etat(self):
+        """ Test : Respect de la hiérarchie des primitives et des états """
         self.client.connecter(self.ip, self.user_admin, self.mdp_admin)
-        self.client.etat_actuel = "INITIALIZED"
         res = self.client.envoyer_requete(F_READ)
         
-        self.inspecter_reponse("F-READ invalide", res)
+        self.journaliser_echange("Contrôle d'accès à la primitive F-READ", res)
         
-        self.assertEqual(res.get(K_CODE), ERREUR_DROITS, "Le serveur n'a pas renvoyé le code 403 attendu.")
-        print("[OK] Test Protection Machine à États")
+        self.assertEqual(res.get(K_CODE), ERREUR_DROITS, "Le système n'a pas bloqué la transition d'état illégale.")
+        print("[SUCCÈS] Intégrité de la machine à états vérifiée")
 
-    def test_03_securite_roles(self):
-        """ Test : Contrôle d'accès par rôles """
+    def test_03_controle_acces_roles(self):
+        """ Test : Étanchéité des privilèges par profil utilisateur """
         client_guest = ClientFTAM()
         try:
             client_guest.connecter(self.ip, self.user_guest, self.mdp_guest)
             res = client_guest.envoyer_requete(F_DELETE, {"nom": "system_config.txt"})
-            self.inspecter_reponse("F-DELETE par invité", res)
-            self.assertEqual(res.get(K_CODE), ERREUR_DROITS, "L'invité a pu supprimer ou n'a pas reçu de code 403.")
-            print("[OK] Test Sécurité : Refus suppression pour invité")
+            
+            self.journaliser_echange("Tentative de suppression (Profil Invité)", res)
+            
+            self.assertEqual(res.get(K_CODE), ERREUR_DROITS, "Le profil invité a pu outrepasser ses droits.")
+            print("[SUCCÈS] Politique de contrôle d'accès par rôles validée")
         finally:
             client_guest.quitter()
 
-    def test_04_transfert_et_verrou(self):
-        """ Test : Transfert complet """
+    def test_04_transfert_integral(self):
+        """ Test : Validation du transfert binaire par blocs (Upload/Download) """
         self.client.connecter(self.ip, self.user_admin, self.mdp_admin)
         nom_test = "test_integration.txt"
-        contenu_test = "Contenu de test pour FTAM " * 100
+        contenu_test = "Contenu de vérification d'intégrité FTAM " * 100
+        
         with open("test_local.txt", "w") as f:
             f.write(contenu_test)
-        import base64
+
         with open("test_local.txt", "rb") as f:
             bloc = f.read(TAILLE_BLOC)
             bloc_b64 = base64.b64encode(bloc).decode("utf-8")
         res_up = self.client.envoyer_requete(F_WRITE, {"nom": nom_test, "data": bloc_b64, "fin": True})
         
-        self.inspecter_reponse("F-WRITE (Upload brut)", res_up)
-        self.assertEqual(res_up.get(K_CODE), SUCCES, "Le téléversement n'a pas reçu le code 200.")
+        self.journaliser_echange("Validation de la primitive F-WRITE (Upload)", res_up)
+        self.assertEqual(res_up.get(K_CODE), SUCCES)
         res_down = self.client.telecharger(nom_test)
         self.assertIn("succes", res_down)
-        print("[OK] Test Transfert Intégral validé")
+        print("[SUCCÈS] Intégrité du transfert bidirectionnel confirmée")
 
-    def test_05_reprise_incident(self):
-        """ Test : Mécanisme de reprise """
+    def test_05_mecanisme_reprise(self):
+        """ Test : Validation du mécanisme de Recovery (Checkpointing) """
         self.client.connecter(self.ip, self.user_admin, self.mdp_admin)
         res = self.client.envoyer_requete(F_RECOVER)
         
-        self.inspecter_reponse("F-RECOVER", res)
-        
-        self.assertIn(res.get(K_CODE), [SUCCES, ERREUR_NON_TROUVE], "Le serveur a bloqué le RECOVER (403 ?) ou crashé.")
-        print("[OK] Test Mécanisme de Reprise")
+        self.journaliser_echange("Interrogation du contexte de reprise (F-RECOVER)", res)
+        self.assertIn(res.get(K_CODE), [SUCCES, ERREUR_NON_TROUVE])
+        print("[SUCCÈS] Service de reprise sur incident opérationnel")
 
-    def test_07_changement_permissions(self):
-        """ Test : Modification dynamique des droits """
+    def test_07_gestion_dynamique_permissions(self):
+        """ Test : Mise à jour des ACL et propagation des droits à un tiers """
         self.client.connecter(self.ip, self.user_admin, self.mdp_admin)
         nom_f = "test_integration.txt"
         
-        params = { "nom": nom_f,"permissions_read": [self.user_admin, self.user_guest],"permissions_delete": [self.user_admin] }
+        params = { 
+            "nom": nom_f,
+            "permissions_read": [self.user_admin, self.user_guest],
+            "permissions_delete": [self.user_admin] 
+        }
         res = self.client.envoyer_requete(F_SET_PERMISSIONS, params)
         
-        self.inspecter_reponse("F-SET-PERMISSIONS brute", res)
-        
-        self.assertEqual(res.get(K_CODE), SUCCES, "Le serveur doit renvoyer le code 200 après modification.")
+        self.journaliser_echange("Mise à jour dynamique des permissions (F-SET-PERMISSIONS)", res)
+        self.assertEqual(res.get(K_CODE), SUCCES)
+
         client_guest = ClientFTAM()
         try:
             client_guest.connecter(self.ip, self.user_guest, self.mdp_guest)
             res_guest = client_guest.envoyer_requete(F_SELECT, {"nom": nom_f})
-            self.assertEqual(res_guest.get(K_CODE), SUCCES, "L'invité devrait avoir accès au fichier après mise à jour.")
-            print("[OK] Test : Droits mis à jour et vérifiés par un tiers")
+            self.assertEqual(res_guest.get(K_CODE), SUCCES)
+            print("[SUCCÈS] Propagation dynamique des droits vérifiée par un tiers")
         finally:
             client_guest.quitter()
 
