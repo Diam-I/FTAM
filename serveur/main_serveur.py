@@ -1,5 +1,5 @@
 # =================================================================
-# SERVEUR FTAM - GESTIONNAIRE DE CONNEXION
+# SERVEUR FTAM 
 # =================================================================
 import os
 import socket
@@ -20,11 +20,9 @@ from serveur.gestion_securite import authentifier
 from serveur.gestion_fichiers import verifier_existence, lire_bloc, RACINE
 
 # Dictionnaire global pour la persistance des sessions
-# Format : { "nom_utilisateur": {"fichier": "nom", "offset": 1024} }
 SESSIONS_RECOVERY = {}
 
 # Dictionnaire global pour les verrous de fichiers
-# Format : { "nom_fichier": True/False }
 FICHIERS_VERROUS = {}
 VERROUS_LOCK = threading.Lock()  # Pour éviter les race conditions
 
@@ -37,7 +35,7 @@ def gerer_client(conn, addr):
     fsm = MachineEtats()
     utilisateur_connecte = None
     fichier_selectionne = None
-    role_user = None  #
+    role_user = None  
     offset_actuel = 0
 
     while True:
@@ -68,7 +66,6 @@ def gerer_client(conn, addr):
                 role = authentifier(parametres.get("user"), parametres.get("mdp"))
                 if role:
                     fsm.transitionner("INITIALIZED")
-                    # sauvegarde du role
                     role_user = role
                     utilisateur_connecte = parametres.get("user")
                     print(
@@ -93,11 +90,9 @@ def gerer_client(conn, addr):
                 if nom_f == ".":
                     try:
                         from os import listdir
-
                         print(
                             f"[\033[93mLIST\033[0m] Envoi de la liste des fichiers à {utilisateur_connecte}"
                         )
-                        # Filtrer les fichiers selon les droits de lecture
                         tous_les_fichiers = listdir(RACINE)
                         fichiers_accessibles = [
                             f
@@ -108,6 +103,7 @@ def gerer_client(conn, addr):
                             {
                                 K_STAT: "SUCCÈS",
                                 K_CODE: SUCCES,
+                                K_MESS: "Liste des fichiers récupérée",
                                 "fichiers": fichiers_accessibles,
                             }
                         )
@@ -134,7 +130,6 @@ def gerer_client(conn, addr):
                                 K_MESS: f"Fichier {nom_f} sélectionné",
                             }
                         )
-
                 else:
                     reponse.update(
                         {K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"}
@@ -146,10 +141,8 @@ def gerer_client(conn, addr):
                     f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}"
                 )
                 fsm.transitionner("OPEN")
-                # Verrouiller le fichier
                 with VERROUS_LOCK:
                     FICHIERS_VERROUS[fichier_selectionne] = True
-                ##################### offset_actuel = 0 ########################
                 taille = os.path.getsize(os.path.join(RACINE, fichier_selectionne))
                 reponse.update(
                     {
@@ -161,9 +154,7 @@ def gerer_client(conn, addr):
                 )
 
             elif primitive == F_READ:
-                """
-                Envoie les données par blocs et sauvegarde l'offset pour le Recovery.
-                """
+                """Envoie les données par blocs et sauvegarde l'offset."""
                 try:
                     print(
                         f"[\033[92mREAD\033[0m] Envoi bloc pour {fichier_selectionne} (Offset: {offset_actuel})",
@@ -180,8 +171,6 @@ def gerer_client(conn, addr):
                         reponse.update(
                             {K_STAT: "DONNÉES", K_CODE: SUCCES, "data": donnees_b64}
                         )
-
-                        #### Commenter pour accélérer les tests, mais à réactiver pour tester la reprise sur incident ####
                         time.sleep(0.05)
                     else:
                         print(
@@ -189,7 +178,6 @@ def gerer_client(conn, addr):
                         )
                         if utilisateur_connecte in SESSIONS_RECOVERY:
                             del SESSIONS_RECOVERY[utilisateur_connecte]
-                        # Dévérouiller le fichier
                         with VERROUS_LOCK:
                             if fichier_selectionne in FICHIERS_VERROUS:
                                 del FICHIERS_VERROUS[fichier_selectionne]
@@ -208,150 +196,99 @@ def gerer_client(conn, addr):
                 )
                 conn.send(json.dumps(reponse).encode())
                 break
+
             elif primitive == F_WRITE:
-                """Fonctionnalité d'écriture (non implémentée dans ce projet, mais prévue pour l'extension future)."""
+                """Réception de fichiers."""
                 nom_f = parametres.get("nom")
                 data_b64 = parametres.get("data")
                 fin = parametres.get("fin", False)
 
                 if not nom_f:
                     reponse.update({K_CODE: 400, K_MESS: "Nom de fichier manquant"})
+                elif not peut_ecrire(utilisateur_connecte, nom_f):
+                    reponse.update({K_CODE: ERREUR_DROITS, K_MESS: "Pas les droits d'écriture"})
                 else:
-                    chemin = os.path.join(RACINE, nom_f)
-
-                    # Crée le dossier RACINE si nécessaire
-                    os.makedirs(RACINE, exist_ok=True)
-
-                    # Vérifier les droits d'écriture
-                    if not peut_ecrire(utilisateur_connecte, nom_f):
-                        reponse.update(
-                            {K_CODE: ERREUR_DROITS, K_MESS: "Pas les droits d'écriture"}
-                        )
-                    else:
-                        # Verrouiller le fichier
+                    try:
                         with VERROUS_LOCK:
                             FICHIERS_VERROUS[nom_f] = True
+                        
+                        chemin = os.path.join(RACINE, nom_f)
+                        os.makedirs(RACINE, exist_ok=True)
 
-                        try:
-                            if data_b64:
-                                bloc = base64.b64decode(data_b64)
-                                mode = "ab" if os.path.exists(chemin) else "wb"
-                                with open(chemin, mode) as f:
-                                    f.write(bloc)
+                        if data_b64:
+                            bloc = base64.b64decode(data_b64)
+                            mode = "ab" if os.path.exists(chemin) else "wb"
+                            with open(chemin, mode) as f:
+                                f.write(bloc)
 
-                            # Si c'est le dernier bloc, déverrouiller et mettre à jour le meta
-                            if fin:
-                                with VERROUS_LOCK:
-                                    if nom_f in FICHIERS_VERROUS:
-                                        del FICHIERS_VERROUS[nom_f]
+                        if fin:
+                            with VERROUS_LOCK:
+                                if nom_f in FICHIERS_VERROUS:
+                                    del FICHIERS_VERROUS[nom_f]
 
-                                # Mettre à jour les droits dans .meta.json
-                                meta = charger_meta()
-                                if nom_f not in meta:
-                                    # Récupérer les permissions depuis la requête (optionnel)
-                                    permissions_read = parametres.get(
-                                        "permissions_read", []
-                                    )
-                                    permissions_delete = parametres.get(
-                                        "permissions_delete", []
-                                    )
+                            meta = charger_meta()
+                            if nom_f not in meta:
+                                permissions_read = parametres.get("permissions_read", [])
+                                permissions_delete = parametres.get("permissions_delete", [])
+                                if utilisateur_connecte not in permissions_read:
+                                    permissions_read.append(utilisateur_connecte)
+                                if utilisateur_connecte not in permissions_delete:
+                                    permissions_delete.append(utilisateur_connecte)
 
-                                    # Toujours ajouter le créateur aux deux listes
-                                    if utilisateur_connecte not in permissions_read:
-                                        permissions_read.append(utilisateur_connecte)
-                                    if utilisateur_connecte not in permissions_delete:
-                                        permissions_delete.append(utilisateur_connecte)
-
-                                    meta[nom_f] = {
-                                        "owner": utilisateur_connecte,
-                                        "permissions": {
-                                            "read": permissions_read,
-                                            "delete": permissions_delete,
-                                        },
-                                    }
+                                meta[nom_f] = {
+                                    "owner": utilisateur_connecte,
+                                    "permissions": {"read": permissions_read, "delete": permissions_delete},
+                                }
                                 with open(META_PATH, "w") as f:
                                     json.dump(meta, f, indent=4)
+                            
+                            print(f"[\033[92mWRITE\033[0m] Fichier '{nom_f}' uploadé par {utilisateur_connecte}")
 
-                            reponse.update(
-                                {
-                                    K_STAT: "SUCCÈS",
-                                    K_CODE: SUCCES,
-                                    K_MESS: (
-                                        "Bloc ajouté" if not fin else "Fichier uploadé"
-                                    ),
-                                }
-                            )
-                        except Exception as e:
-                            reponse.update(
-                                {K_CODE: 500, K_MESS: f"Erreur serveur: {str(e)}"}
-                            )
+                        # HARMONISATION : Ajout de K_CODE: SUCCES pour valider le test
+                        reponse.update({
+                            K_STAT: "SUCCÈS",
+                            K_CODE: SUCCES, 
+                            K_MESS: "Bloc reçu" if not fin else "Fichier uploadé"
+                        })
+                    except Exception as e:
+                        reponse.update({K_CODE: 500, K_MESS: str(e)})
 
             elif primitive == F_SET_PERMISSIONS:
-                """Permet au propriétaire de modifier les permissions d'un fichier."""
+                """Modification des droits."""
                 nom_f = parametres.get("nom")
-                permissions_read = parametres.get("permissions_read", [])
-                permissions_delete = parametres.get("permissions_delete", [])
-
-                if not nom_f:
-                    reponse.update({K_CODE: 400, K_MESS: "Nom de fichier manquant"})
-                elif not verifier_existence(nom_f):
-                    reponse.update(
-                        {K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"}
-                    )
+                if not verifier_existence(nom_f):
+                    reponse.update({K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"})
                 else:
-                    # Vérifier que l'utilisateur est propriétaire (owner)
                     meta = charger_meta()
-                    if nom_f not in meta:
-                        reponse.update(
-                            {
-                                K_CODE: ERREUR_NON_TROUVE,
-                                K_MESS: "Fichier non trouvé dans les métadonnées",
-                            }
-                        )
-                    elif meta[nom_f].get("owner") != utilisateur_connecte:
-                        reponse.update(
-                            {
-                                K_CODE: ERREUR_DROITS,
-                                K_MESS: "Seul le propriétaire peut modifier les permissions",
-                            }
-                        )
+                    if nom_f not in meta or meta[nom_f].get("owner") != utilisateur_connecte:
+                        reponse.update({K_CODE: ERREUR_DROITS, K_MESS: "Seul le propriétaire peut modifier"})
                     else:
-                        # Toujours inclure le propriétaire dans les permissions
-                        if utilisateur_connecte not in permissions_read:
-                            permissions_read.append(utilisateur_connecte)
-                        if utilisateur_connecte not in permissions_delete:
-                            permissions_delete.append(utilisateur_connecte)
+                        p_read = parametres.get("permissions_read", [])
+                        p_delete = parametres.get("permissions_delete", [])
+                        if utilisateur_connecte not in p_read: p_read.append(utilisateur_connecte)
+                        if utilisateur_connecte not in p_delete: p_delete.append(utilisateur_connecte)
 
-                        # Mettre à jour les permissions
-                        meta[nom_f]["permissions"]["read"] = permissions_read
-                        meta[nom_f]["permissions"]["delete"] = permissions_delete
-
+                        meta[nom_f]["permissions"] = {"read": p_read, "delete": p_delete}
                         with open(META_PATH, "w") as f:
                             json.dump(meta, f, indent=4)
 
-                        reponse.update(
-                            {
-                                K_STAT: "SUCCÈS",
-                                K_CODE: SUCCES,
-                                K_MESS: f"Permissions mises à jour pour {nom_f}",
-                            }
-                        )
-                        print(
-                            f"[INFO] Permissions modifiées pour {nom_f} par {utilisateur_connecte}"
-                        )
+                        # HARMONISATION : Ajout de K_CODE: SUCCES
+                        reponse.update({
+                            K_STAT: "SUCCÈS", 
+                            K_CODE: SUCCES, 
+                            K_MESS: f"Permissions mises à jour pour {nom_f}" 
+                        })
+                        print(f"[INFO] Permissions modifiées pour {nom_f} par {utilisateur_connecte}")
 
             elif primitive == F_RECOVER:
-                """
-                Restaure le contexte de transfert après une coupure.
-                Vérifie si une session précédente existe pour cet utilisateur.
-                """
+                """Mécanisme de reprise."""
                 if utilisateur_connecte in SESSIONS_RECOVERY:
-                    print(
-                        f"[\033[35mRECO\033[0m] Demande de reprise pour {utilisateur_connecte} sur {fichier_selectionne}"
-                    )
                     contexte = SESSIONS_RECOVERY[utilisateur_connecte]
                     fichier_selectionne = contexte["fichier"]
                     offset_actuel = contexte["offset"]
+                    print(
+                        f"[\033[35mRECO\033[0m] Demande de reprise pour {utilisateur_connecte} sur {fichier_selectionne}"
+                    )
                     fsm.transitionner("OPEN")
                     reponse.update(
                         {
@@ -362,7 +299,6 @@ def gerer_client(conn, addr):
                             K_MESS: f"Reprise à l'offset {offset_actuel}",
                         }
                     )
-
                 else:
                     reponse.update(
                         {
@@ -372,72 +308,59 @@ def gerer_client(conn, addr):
                     )
 
             elif primitive == F_DELETE:
-                """Supprime un fichier (fonctionnalité réservée aux propriétaires/admins)."""
+                """Suppression de fichier - Sécurité vérifiée en priorité."""
                 nom_f = parametres.get("nom")
-                print(
-                    f"[\033[91mDEL \033[0m] Suppression de '{nom_f}' demandée par {utilisateur_connecte}"
-                )
+                print(f"[\033[91mDEL \033[0m] Requête de suppression : '{nom_f}' par {utilisateur_connecte}")
+                
                 try:
-                    chemin = os.path.join(RACINE, nom_f)
-                    if verifier_existence(nom_f):
-                        # Vérifier si le fichier est verrouillé
-                        with VERROUS_LOCK:
-                            fichier_verrouille = (
-                                nom_f in FICHIERS_VERROUS and FICHIERS_VERROUS[nom_f]
-                            )
-
-                        if fichier_verrouille:
-                            reponse.update(
-                                {
-                                    K_CODE: ERREUR_VERROU,
-                                    K_MESS: "Le fichier est en cours de téléchargement et ne peut pas être supprimé",
-                                }
-                            )
-                        elif not peut_supprimer(utilisateur_connecte, nom_f):
-                            reponse.update(
-                                {
-                                    K_CODE: ERREUR_DROITS,
-                                    K_MESS: "Vous n'avez pas les droits de suppression sur ce fichier",
-                                }
-                            )
-                        else:
-                            os.remove(chemin)
-                            reponse.update(
-                                {
-                                    K_STAT: "SUCCÈS",
-                                    K_CODE: SUCCES,
-                                    K_MESS: f"Fichier {nom_f} supprimé",
-                                }
-                            )
-                            print(
-                                f"[INFO] Fichier {nom_f} supprimé par {utilisateur_connecte}"
-                            )
+                    if not peut_supprimer(utilisateur_connecte, nom_f):
+                        reponse.update({
+                            K_STAT: "ERREUR",
+                            K_CODE: ERREUR_DROITS, 
+                            K_MESS: "Accès refusé : droits de suppression insuffisants"
+                        })
+                    
+                    elif not verifier_existence(nom_f):
+                        reponse.update({
+                            K_STAT: "ERREUR",
+                            K_CODE: ERREUR_NON_TROUVE, # Renvoie 404
+                            K_MESS: "Fichier introuvable sur le serveur"
+                        })
                     else:
-                        reponse.update(
-                            {
-                                K_CODE: ERREUR_NON_TROUVE,
-                                K_MESS: "Fichier introuvable",
-                            }
-                        )
+                        with VERROUS_LOCK:
+                            verrouille = (nom_f in FICHIERS_VERROUS and FICHIERS_VERROUS[nom_f])
+                        
+                        if verrouille:
+                            reponse.update({K_CODE: ERREUR_VERROU, K_MESS: "Fichier en cours d'utilisation"})
+                        else:
+                            os.remove(os.path.join(RACINE, nom_f))
+                            reponse.update({
+                                K_STAT: "SUCCÈS",
+                                K_CODE: SUCCES,
+                                K_MESS: f"Fichier {nom_f} supprimé avec succès"
+                            })
+                            print(f"[INFO] Suppression réussie de {nom_f}")
+                            
                 except Exception as e:
                     reponse.update({K_CODE: 500, K_MESS: f"Erreur système: {str(e)}"})
+
             conn.send(json.dumps(reponse).encode())
             print("\n\n + + + + ============== + + + +\n\n")
+
         except Exception as e:
             print(f"[ERREUR] {e} avec {addr}")
             break
 
-    # Nettoyer les verrous en cas de déconnexion inopinée
+    # Nettoyage des verrous
     if fichier_selectionne:
         with VERROUS_LOCK:
             if fichier_selectionne in FICHIERS_VERROUS:
                 del FICHIERS_VERROUS[fichier_selectionne]
-
     conn.close()
 
 
 def demarrer_serveur():
-    """Lance le serveur TCP avec un arrêt contrôlé."""
+    """Lance le serveur TCP."""
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
@@ -453,24 +376,19 @@ def demarrer_serveur():
             while True:
                 try:
                     conn, addr = server_socket.accept()
-                    threading.Thread(
-                        target=gerer_client, args=(conn, addr), daemon=True
-                    ).start()
-                except:
-                    break
+                    threading.Thread(target=gerer_client, args=(conn, addr), daemon=True).start()
+                except: break
 
         thread_accept = threading.Thread(target=accepter_clients, daemon=True)
         thread_accept.start()
         while True:
-            commande = input().strip().upper()
-            if commande == "QUIT":
-                print("\033[91mArrêt du serveur en cours...\033[0m")
+            if input().strip().upper() == "QUIT":
+                print("\033[91mArrêt du serveur...\033[0m")
                 server_socket.close()
                 break
 
     except Exception as e:
         print(f"Erreur au démarrage : {e}")
-
 
 if __name__ == "__main__":
     demarrer_serveur()

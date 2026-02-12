@@ -1,8 +1,5 @@
 # =================================================================
-# MODULE D'AUTHENTIFICATION ET CONTRÔLE D'ACCÈS
-# Rôle : Vérifie l'identité de l'utilisateur (F-INITIALIZE) et 
-#        attribue des droits (Lecteur/Propriétaire) pour restreindre
-#        les actions sensibles comme la suppression (F-DELETE).
+# MODULE D'AUTHENTIFICATION 
 # =================================================================
 
 # Base de données simulée 
@@ -13,7 +10,7 @@ UTILISATEURS = {
 }
 
 def authentifier(utilisateur, mdp):
-    """Vérifie les identifiants et retourne le rôle si valide """
+    """ Vérifie les identifiants et retourne le rôle si valide """
     if utilisateur in UTILISATEURS and UTILISATEURS[utilisateur]["mdp"] == mdp:
         return UTILISATEURS[utilisateur]["role"]
     return None

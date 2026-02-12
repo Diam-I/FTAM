@@ -8,16 +8,14 @@ from .coeur_client import ClientFTAM
 
 
 def afficher_etat(client):
-    """Affiche l'état actuel de la machine à états pour le client."""
+    """ Affiche l'état actuel de la machine à états pour le client """
     couleur = {
-        "IDLE": "\033[90m",  # Gris
-        "INITIALIZED": "\033[94m",  # Bleu
-        "SELECTED": "\033[93m",  # Jaune
-        "OPEN": "\033[92m",  # Vert
+        "IDLE": "\033[90m",  
+        "INITIALIZED": "\033[94m",  
+        "SELECTED": "\033[93m",  
+        "OPEN": "\033[92m", 
     }
-    print(
-        f"État actuel : {couleur.get(client.etat_actuel, '')}{client.etat_actuel}\033[0m"
-    )
+    print( f"État actuel : {couleur.get(client.etat_actuel, '')}{client.etat_actuel}\033[0m")
 
 
 def main():
@@ -86,7 +84,7 @@ def main():
 
 
 def connexion(client):
-    """Gère la connexion de l'utilisateur en demandant les informations nécessaires."""
+    """ Gère la connexion de l'utilisateur en demandant les informations nécessaires """
     ip = input("Adresse IP [127.0.0.1] : ") or "127.0.0.1"
     user = input("Utilisateur : ").strip()
     mdp = getpass("Mot de passe : ").strip()
@@ -98,7 +96,7 @@ def connexion(client):
 
 
 def lister_fichiers(client):
-    """Affiche la liste des fichiers disponibles sur le serveur."""
+    """ Affiche la liste des fichiers disponibles sur le serveur """
     res = client.lister_fichiers()
     if "erreur" in res:
         print(f"[ERREUR] {res['erreur']}")
@@ -109,7 +107,7 @@ def lister_fichiers(client):
 
 
 def telecharger(client):
-    """Gère le téléchargement d'un fichier en demandant son nom et en affichant les progrès."""
+    """ Gère le téléchargement d'un fichier en demandant son nom et en affichant les progrès """
     nom = input("Nom du fichier à télécharger : ").strip()
     res = client.telecharger(nom)
     if "erreur" in res:
@@ -119,7 +117,7 @@ def telecharger(client):
 
 
 def reprendre_telechargement(client):
-    """Gère la reprise d'un téléchargement en demandant le nom du fichier."""
+    """ Gère la reprise d'un téléchargement en demandant le nom du fichier """
     nom = input("Nom du fichier : ").strip()
     res = client.reprendre_telechargement(nom)
     if "erreur" in res:
@@ -129,7 +127,7 @@ def reprendre_telechargement(client):
 
 
 def supprimer_fichier(client):
-    """Demande confirmation avant de supprimer un fichier distant."""
+    """ Demande confirmation avant de supprimer un fichier distant """
     nom = input("Nom du fichier à supprimer définitivement : ").strip()
     conf = input(f"Êtes-vous sûr de vouloir supprimer '{nom}' ? (o/n) : ").lower()
 
@@ -144,33 +142,24 @@ def supprimer_fichier(client):
 
 
 def ajouter_fichier(client):
-    """Demande le fichier local à téléverser et son nom distant."""
+    """ Demande le fichier local à téléverser et son nom distant """
     chemin_local = input("Chemin du fichier local à téléverser : ").strip()
     nom_distant = input("Nom du fichier distant sur le serveur : ").strip()
 
-    # Demander si l'utilisateur veut définir des permissions
-    definir_perms = (
-        input("Voulez-vous définir des permissions ? (o/n) : ").strip().lower()
-    )
+    definir_perms = (input("Voulez-vous définir des permissions ? (o/n) : ").strip().lower())
     permissions_read = None
     permissions_delete = None
 
     if definir_perms == "o":
-        read_input = input(
-            "Utilisateurs avec droit de lecture (séparés par des virgules) : "
-        ).strip()
+        read_input = input( "Utilisateurs avec droit de lecture (séparés par des virgules) : " ).strip()
         if read_input:
             permissions_read = [u.strip() for u in read_input.split(",")]
 
-        delete_input = input(
-            "Utilisateurs avec droit de suppression (séparés par des virgules) : "
-        ).strip()
+        delete_input = input("Utilisateurs avec droit de suppression (séparés par des virgules) : ").strip()
         if delete_input:
             permissions_delete = [u.strip() for u in delete_input.split(",")]
 
-    client.envoyer_requete(
-        F_SELECT, {"nom": nom_distant}
-    )  # Vérifie si le fichier existe déjà
+    client.envoyer_requete(F_SELECT, {"nom": nom_distant}) 
     res = client.uploader(
         chemin_local, nom_distant, permissions_read, permissions_delete
     )
@@ -181,24 +170,14 @@ def ajouter_fichier(client):
 
 
 def modifier_permissions(client):
-    """Permet de modifier les permissions d'un fichier existant."""
-    nom_fichier = input(
-        "Nom du fichier dont vous voulez modifier les permissions : "
-    ).strip()
+    """ Permet de modifier les permissions d'un fichier existant """
+    nom_fichier = input( "Nom du fichier dont vous voulez modifier les permissions : ").strip()
 
-    read_input = input(
-        "Nouveaux utilisateurs avec droit de lecture (séparés par des virgules) : "
-    ).strip()
-    permissions_read = (
-        [u.strip() for u in read_input.split(",")] if read_input else None
-    )
+    read_input = input( "Nouveaux utilisateurs avec droit de lecture (séparés par des virgules) : " ).strip()
+    permissions_read = ([u.strip() for u in read_input.split(",")] if read_input else None )
 
-    delete_input = input(
-        "Nouveaux utilisateurs avec droit de suppression (séparés par des virgules) : "
-    ).strip()
-    permissions_delete = (
-        [u.strip() for u in delete_input.split(",")] if delete_input else None
-    )
+    delete_input = input( "Nouveaux utilisateurs avec droit de suppression (séparés par des virgules) : ").strip()
+    permissions_delete = ([u.strip() for u in delete_input.split(",")] if delete_input else None)
 
     res = client.set_permissions(nom_fichier, permissions_read, permissions_delete)
     if "erreur" in res:

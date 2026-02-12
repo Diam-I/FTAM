@@ -26,12 +26,12 @@ def peut_supprimer(utilisateur, nom_fichier):
 
 
 def peut_ecrire(utilisateur, nom_fichier):
-    """Vérifie si l'utilisateur peut écrire/créer un fichier.
+    """ Vérifie si l'utilisateur peut écrire/créer un fichier
     Retourne True si :
-    - Le fichier n'existe pas encore (création de nouveau fichier)
-    - OU l'utilisateur a les droits de suppression (modification)
+    - Le fichier n'existe pas encore 
+    - OU l'utilisateur a les droits de suppression
     """
     meta = charger_meta()
     if nom_fichier not in meta:
-        return True  # Nouveau fichier → autoriser la création
+        return True 
     return utilisateur in meta[nom_fichier]["permissions"].get("delete", [])

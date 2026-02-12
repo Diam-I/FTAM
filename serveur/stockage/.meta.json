@@ -1,58 +1,118 @@
 {
-  "BE_Interoperabilite_TRAORE_DIDANE.pdf": {
-    "owner": "salia",
-    "permissions": {
-      "read": ["salia"],
-      "delete": ["salia"]
+    "BE_Interoperabilite_TRAORE_DIDANE.pdf": {
+        "owner": "salia",
+        "permissions": {
+            "read": [
+                "salia"
+            ],
+            "delete": [
+                "salia"
+            ]
+        }
+    },
+    "network-basics.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "amina",
+                "salia"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "nix-commands.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "amina",
+                "salia"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "Cours1-QNAP.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "UPSSITECH.png": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "PaulSab.png": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "salia",
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "syl_L3_IRT.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "salia",
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "Cursus_IRT_L3.pdf": {
+        "owner": "amina",
+        "permissions": {
+            "read": [
+                "invite",
+                "amina"
+            ],
+            "delete": [
+                "amina"
+            ]
+        }
+    },
+    "test_integration.txt": {
+        "owner": "salia",
+        "permissions": {
+            "read": [
+                "salia",
+                "invite"
+            ],
+            "delete": [
+                "salia"
+            ]
+        }
+    },
+    "secret_admin.txt": {
+        "owner": "salia",
+        "permissions": {
+            "read": [
+                "salia"
+            ],
+            "delete": [
+                "salia"
+            ]
+        }
     }
-  },
-  "network-basics.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["amina", "salia"],
-      "delete": ["amina"]
-    }
-  },
-  "nix-commands.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["amina", "salia"],
-      "delete": ["amina"]
-    }
-  },
-  "Cours1-QNAP.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["amina"],
-      "delete": ["amina"]
-    }
-  },
-  "UPSSITECH.png": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["amina"],
-      "delete": ["amina"]
-    }
-  },
-  "PaulSab.png": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["salia", "amina"],
-      "delete": ["amina"]
-    }
-  },
-  "syl_L3_IRT.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["salia", "amina"],
-      "delete": ["amina"]
-    }
-  },
-  "Cursus_IRT_L3.pdf": {
-    "owner": "amina",
-    "permissions": {
-      "read": ["invite", "amina"],
-      "delete": ["amina"]
-    }
-  }
 }
