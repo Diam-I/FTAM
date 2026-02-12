@@ -31,7 +31,7 @@ class MachineEtats:
         elif primitive == F_DELETE:
             return self.etat_actuel in ["INITIALIZED", "SELECTED"]
         elif primitive == F_WRITE:
-            return self.etat_actuel == "INITIALIZED"
+            return self.etat_actuel in ["INITIALIZED", "SELECTED"]
         elif primitive == F_SET_PERMISSIONS:
             return self.etat_actuel in ["INITIALIZED", "SELECTED"]
         return False
