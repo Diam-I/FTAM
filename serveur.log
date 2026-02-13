@@ -1,0 +1,39 @@
+2026-02-13 13:29:38 [INFO] Connexion établie avec ('127.0.0.1', 50194)
+2026-02-13 13:29:38 [ERROR] Échec d'authentification pour amina depuis ('127.0.0.1', 50194)
+2026-02-13 13:29:38 [INFO] 
+
+ + + + + ============== + + + +
+
+
+2026-02-13 13:29:46 [INFO] Connexion établie avec ('127.0.0.1', 50196)
+2026-02-13 13:29:46 [INFO] Authentification réussie pour amina (Rôle: proprietaire) depuis ('127.0.0.1', 50196)
+2026-02-13 13:29:46 [INFO] 
+
+ + + + + ============== + + + +
+
+
+2026-02-13 13:29:48 [INFO] Liste des fichiers demandée par amina depuis ('127.0.0.1', 50196)
+2026-02-13 13:29:48 [INFO] 
+
+ + + + + ============== + + + +
+
+
+2026-02-13 13:29:51 [ERROR] Fichier 'amina' introuvable pour amina depuis ('127.0.0.1', 50196)
+2026-02-13 13:29:51 [INFO] 
+
+ + + + + ============== + + + +
+
+
+2026-02-13 13:29:52 [INFO] Liste des fichiers demandée par amina depuis ('127.0.0.1', 50196)
+2026-02-13 13:29:52 [INFO] 
+
+ + + + + ============== + + + +
+
+
+2026-02-13 13:29:59 [ERROR] Fichier 'nix-commands.pdf' introuvable pour amina depuis ('127.0.0.1', 50196)
+2026-02-13 13:29:59 [INFO] 
+
+ + + + + ============== + + + +
+
+
+2026-02-13 13:30:01 [INFO] Déconnexion de amina depuis ('127.0.0.1', 50196)

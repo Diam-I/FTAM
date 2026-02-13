@@ -1,5 +1,5 @@
 # =================================================================
-# SERVEUR FTAM 
+# SERVEUR FTAM
 # =================================================================
 import os
 import socket
@@ -18,6 +18,7 @@ from serveur.gestion_droits import (
 from serveur.gestion_etats import MachineEtats
 from serveur.gestion_securite import authentifier
 from serveur.gestion_fichiers import verifier_existence, lire_bloc, RACINE
+from serveur.journalisation import configurer_journalisation, logger_info, logger_erreur
 
 # Dictionnaire global pour la persistance des sessions
 SESSIONS_RECOVERY = {}
@@ -32,10 +33,11 @@ def gerer_client(conn, addr):
     Fonction exécutée dans un thread pour chaque client connecté.
     Gère le cycle de vie de la session FTAM.
     """
+    logger_info(f"Connexion établie avec {addr}")
     fsm = MachineEtats()
     utilisateur_connecte = None
     fichier_selectionne = None
-    role_user = None  
+    role_user = None
     offset_actuel = 0
 
     while True:
@@ -53,6 +55,9 @@ def gerer_client(conn, addr):
 
             # --- Vérification de la Machine à États ---
             if not fsm.peut_executer(primitive):
+                logger_erreur(
+                    f"Action interdite : {primitive} en état {fsm.etat_actuel} pour {addr}"
+                )
                 reponse.update(
                     {
                         K_CODE: ERREUR_DROITS,
@@ -65,6 +70,9 @@ def gerer_client(conn, addr):
                 """Initialise la session et authentifie l'utilisateur."""
                 role = authentifier(parametres.get("user"), parametres.get("mdp"))
                 if role:
+                    logger_info(
+                        f"Authentification réussie pour {parametres.get('user')} (Rôle: {role}) depuis {addr}"
+                    )
                     fsm.transitionner("INITIALIZED")
                     role_user = role
                     utilisateur_connecte = parametres.get("user")
@@ -80,6 +88,9 @@ def gerer_client(conn, addr):
                         }
                     )
                 else:
+                    logger_erreur(
+                        f"Échec d'authentification pour {parametres.get('user')} depuis {addr}"
+                    )
                     reponse.update(
                         {K_CODE: ERREUR_AUTH, K_MESS: "Identifiants invalides"}
                     )
@@ -90,6 +101,10 @@ def gerer_client(conn, addr):
                 if nom_f == ".":
                     try:
                         from os import listdir
+
+                        logger_info(
+                            f"Liste des fichiers demandée par {utilisateur_connecte} depuis {addr}"
+                        )
                         print(
                             f"[\033[93mLIST\033[0m] Envoi de la liste des fichiers à {utilisateur_connecte}"
                         )
@@ -118,8 +133,11 @@ def gerer_client(conn, addr):
                             }
                         )
                     else:
+                        logger_info(
+                            f"Fichier '{nom_f}' sélectionné par {utilisateur_connecte} depuis {addr}"
+                        )
                         print(
-                            f"[\033[93mSEL \033[0m] Fichier '{nom_f}' sélectionné par {utilisateur_connecte}"
+                            f"[\033[93mSELE\033[0m] {utilisateur_connecte} a sélectionné le fichier : {nom_f}"
                         )
                         fichier_selectionne = nom_f
                         fsm.transitionner("SELECTED")
@@ -131,12 +149,18 @@ def gerer_client(conn, addr):
                             }
                         )
                 else:
+                    logger_erreur(
+                        f"Fichier '{nom_f}' introuvable pour {utilisateur_connecte} depuis {addr}"
+                    )
                     reponse.update(
                         {K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"}
                     )
 
             elif primitive == F_OPEN:
                 """Prépare le fichier pour le transfert."""
+                logger_info(
+                    f"Fichier '{fichier_selectionne}' ouvert pour {utilisateur_connecte} depuis {addr}"
+                )
                 print(
                     f"[\033[32mOPEN\033[0m] Ouverture du fichier : {fichier_selectionne}"
                 )
@@ -156,12 +180,17 @@ def gerer_client(conn, addr):
             elif primitive == F_READ:
                 """Envoie les données par blocs et sauvegarde l'offset."""
                 try:
+                    logger_info(
+                        f"[\033[92mREAD\033[0m] Envoi bloc pour {fichier_selectionne} (Offset: {offset_actuel})"
+                    )
                     print(
-                        f"[\033[92mREAD\033[0m] Envoi bloc pour {fichier_selectionne} (Offset: {offset_actuel})",
-                        end="\r",
+                        f"[\033[92mREAD\033[0m] Envoi du bloc à partir de l'offset {offset_actuel} pour {fichier_selectionne}"
                     )
                     contenu = lire_bloc(fichier_selectionne, offset_actuel, TAILLE_BLOC)
                     if contenu:
+                        logger_info(
+                            f"Bloc de {len(contenu)} octets envoyé pour {fichier_selectionne} à {utilisateur_connecte}"
+                        )
                         donnees_b64 = base64.b64encode(contenu).decode("utf-8")
                         offset_actuel += len(contenu)
                         SESSIONS_RECOVERY[utilisateur_connecte] = {
@@ -173,6 +202,9 @@ def gerer_client(conn, addr):
                         )
                         time.sleep(0.05)
                     else:
+                        logger_info(
+                            f"Transfert terminé pour {fichier_selectionne} à {utilisateur_connecte}"
+                        )
                         print(
                             f"\n[\033[92mFIN\033[0m] Transfert terminé pour {fichier_selectionne}"
                         )
@@ -190,6 +222,7 @@ def gerer_client(conn, addr):
 
             elif primitive == F_TERMINATE:
                 """Ferme proprement la session."""
+                logger_info(f"Déconnexion de {utilisateur_connecte} depuis {addr}")
                 fsm.transitionner("IDLE")
                 reponse.update(
                     {K_STAT: "SUCCÈS", K_CODE: SUCCES, K_MESS: "Déconnexion"}
@@ -199,19 +232,30 @@ def gerer_client(conn, addr):
 
             elif primitive == F_WRITE:
                 """Réception de fichiers."""
+                logger_info(
+                    f"Réception de données pour {fichier_selectionne} de {utilisateur_connecte} depuis {addr}"
+                )
                 nom_f = parametres.get("nom")
                 data_b64 = parametres.get("data")
                 fin = parametres.get("fin", False)
 
                 if not nom_f:
                     reponse.update({K_CODE: 400, K_MESS: "Nom de fichier manquant"})
+                    logger_erreur(
+                        f"Nom de fichier manquant dans la requête F_WRITE de {utilisateur_connecte} depuis {addr}"
+                    )
                 elif not peut_ecrire(utilisateur_connecte, nom_f):
-                    reponse.update({K_CODE: ERREUR_DROITS, K_MESS: "Pas les droits d'écriture"})
+                    logger_erreur(
+                        f"Accès refusé pour l'écriture de '{nom_f}' par {utilisateur_connecte} depuis {addr}"
+                    )
+                    reponse.update(
+                        {K_CODE: ERREUR_DROITS, K_MESS: "Pas les droits d'écriture"}
+                    )
                 else:
                     try:
                         with VERROUS_LOCK:
                             FICHIERS_VERROUS[nom_f] = True
-                        
+
                         chemin = os.path.join(RACINE, nom_f)
                         os.makedirs(RACINE, exist_ok=True)
 
@@ -228,8 +272,12 @@ def gerer_client(conn, addr):
 
                             meta = charger_meta()
                             if nom_f not in meta:
-                                permissions_read = parametres.get("permissions_read", [])
-                                permissions_delete = parametres.get("permissions_delete", [])
+                                permissions_read = parametres.get(
+                                    "permissions_read", []
+                                )
+                                permissions_delete = parametres.get(
+                                    "permissions_delete", []
+                                )
                                 if utilisateur_connecte not in permissions_read:
                                     permissions_read.append(utilisateur_connecte)
                                 if utilisateur_connecte not in permissions_delete:
@@ -237,19 +285,32 @@ def gerer_client(conn, addr):
 
                                 meta[nom_f] = {
                                     "owner": utilisateur_connecte,
-                                    "permissions": {"read": permissions_read, "delete": permissions_delete},
+                                    "permissions": {
+                                        "read": permissions_read,
+                                        "delete": permissions_delete,
+                                    },
                                 }
                                 with open(META_PATH, "w") as f:
                                     json.dump(meta, f, indent=4)
-                            
-                            print(f"[\033[92mWRITE\033[0m] Fichier '{nom_f}' uploadé par {utilisateur_connecte}")
+
+                            logger_info(
+                                f"[\033[92mWRITE\033[0m] Fichier '{nom_f}' uploadé par {utilisateur_connecte}"
+                            )
+                            print(
+                                f"[\033[92mWRITE\033[0m] Fichier '{nom_f}' uploadé par {utilisateur_connecte}"
+                            )
 
                         # HARMONISATION : Ajout de K_CODE: SUCCES pour valider le test
-                        reponse.update({
-                            K_STAT: "SUCCÈS",
-                            K_CODE: SUCCES, 
-                            K_MESS: "Bloc reçu" if not fin else "Fichier uploadé"
-                        })
+                        logger_info(
+                            f"Bloc de données reçu pour '{nom_f}' de {utilisateur_connecte} (Fin: {fin})"
+                        )
+                        reponse.update(
+                            {
+                                K_STAT: "SUCCÈS",
+                                K_CODE: SUCCES,
+                                K_MESS: "Bloc reçu" if not fin else "Fichier uploadé",
+                            }
+                        )
                     except Exception as e:
                         reponse.update({K_CODE: 500, K_MESS: str(e)})
 
@@ -257,28 +318,50 @@ def gerer_client(conn, addr):
                 """Modification des droits."""
                 nom_f = parametres.get("nom")
                 if not verifier_existence(nom_f):
-                    reponse.update({K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"})
+                    logger_erreur(
+                        f"Fichier '{nom_f}' introuvable pour la modification des permissions par {utilisateur_connecte} depuis {addr}"
+                    )
+                    reponse.update(
+                        {K_CODE: ERREUR_NON_TROUVE, K_MESS: "Fichier introuvable"}
+                    )
                 else:
                     meta = charger_meta()
-                    if nom_f not in meta or meta[nom_f].get("owner") != utilisateur_connecte:
-                        reponse.update({K_CODE: ERREUR_DROITS, K_MESS: "Seul le propriétaire peut modifier"})
+                    if (
+                        nom_f not in meta
+                        or meta[nom_f].get("owner") != utilisateur_connecte
+                    ):
+                        reponse.update(
+                            {
+                                K_CODE: ERREUR_DROITS,
+                                K_MESS: "Seul le propriétaire peut modifier",
+                            }
+                        )
                     else:
                         p_read = parametres.get("permissions_read", [])
                         p_delete = parametres.get("permissions_delete", [])
-                        if utilisateur_connecte not in p_read: p_read.append(utilisateur_connecte)
-                        if utilisateur_connecte not in p_delete: p_delete.append(utilisateur_connecte)
+                        if utilisateur_connecte not in p_read:
+                            p_read.append(utilisateur_connecte)
+                        if utilisateur_connecte not in p_delete:
+                            p_delete.append(utilisateur_connecte)
 
-                        meta[nom_f]["permissions"] = {"read": p_read, "delete": p_delete}
+                        meta[nom_f]["permissions"] = {
+                            "read": p_read,
+                            "delete": p_delete,
+                        }
                         with open(META_PATH, "w") as f:
                             json.dump(meta, f, indent=4)
 
                         # HARMONISATION : Ajout de K_CODE: SUCCES
-                        reponse.update({
-                            K_STAT: "SUCCÈS", 
-                            K_CODE: SUCCES, 
-                            K_MESS: f"Permissions mises à jour pour {nom_f}" 
-                        })
-                        print(f"[INFO] Permissions modifiées pour {nom_f} par {utilisateur_connecte}")
+                        reponse.update(
+                            {
+                                K_STAT: "SUCCÈS",
+                                K_CODE: SUCCES,
+                                K_MESS: f"Permissions mises à jour pour {nom_f}",
+                            }
+                        )
+                        logger_info(
+                            f"[INFO] Permissions modifiées pour {nom_f} par {utilisateur_connecte}"
+                        )
 
             elif primitive == F_RECOVER:
                 """Mécanisme de reprise."""
@@ -286,7 +369,7 @@ def gerer_client(conn, addr):
                     contexte = SESSIONS_RECOVERY[utilisateur_connecte]
                     fichier_selectionne = contexte["fichier"]
                     offset_actuel = contexte["offset"]
-                    print(
+                    logger_info(
                         f"[\033[35mRECO\033[0m] Demande de reprise pour {utilisateur_connecte} sur {fichier_selectionne}"
                     )
                     fsm.transitionner("OPEN")
@@ -310,45 +393,60 @@ def gerer_client(conn, addr):
             elif primitive == F_DELETE:
                 """Suppression de fichier - Sécurité vérifiée en priorité."""
                 nom_f = parametres.get("nom")
-                print(f"[\033[91mDEL \033[0m] Requête de suppression : '{nom_f}' par {utilisateur_connecte}")
-                
+                logger_info(
+                    f"[\033[91mDEL \033[0m] Requête de suppression : '{nom_f}' par {utilisateur_connecte}"
+                )
+
                 try:
                     if not peut_supprimer(utilisateur_connecte, nom_f):
-                        reponse.update({
-                            K_STAT: "ERREUR",
-                            K_CODE: ERREUR_DROITS, 
-                            K_MESS: "Accès refusé : droits de suppression insuffisants"
-                        })
-                    
+                        reponse.update(
+                            {
+                                K_STAT: "ERREUR",
+                                K_CODE: ERREUR_DROITS,
+                                K_MESS: "Accès refusé : droits de suppression insuffisants",
+                            }
+                        )
+
                     elif not verifier_existence(nom_f):
-                        reponse.update({
-                            K_STAT: "ERREUR",
-                            K_CODE: ERREUR_NON_TROUVE, # Renvoie 404
-                            K_MESS: "Fichier introuvable sur le serveur"
-                        })
+                        reponse.update(
+                            {
+                                K_STAT: "ERREUR",
+                                K_CODE: ERREUR_NON_TROUVE,  # Renvoie 404
+                                K_MESS: "Fichier introuvable sur le serveur",
+                            }
+                        )
                     else:
                         with VERROUS_LOCK:
-                            verrouille = (nom_f in FICHIERS_VERROUS and FICHIERS_VERROUS[nom_f])
-                        
+                            verrouille = (
+                                nom_f in FICHIERS_VERROUS and FICHIERS_VERROUS[nom_f]
+                            )
+
                         if verrouille:
-                            reponse.update({K_CODE: ERREUR_VERROU, K_MESS: "Fichier en cours d'utilisation"})
+                            reponse.update(
+                                {
+                                    K_CODE: ERREUR_VERROU,
+                                    K_MESS: "Fichier en cours d'utilisation",
+                                }
+                            )
                         else:
                             os.remove(os.path.join(RACINE, nom_f))
-                            reponse.update({
-                                K_STAT: "SUCCÈS",
-                                K_CODE: SUCCES,
-                                K_MESS: f"Fichier {nom_f} supprimé avec succès"
-                            })
-                            print(f"[INFO] Suppression réussie de {nom_f}")
-                            
+                            reponse.update(
+                                {
+                                    K_STAT: "SUCCÈS",
+                                    K_CODE: SUCCES,
+                                    K_MESS: f"Fichier {nom_f} supprimé avec succès",
+                                }
+                            )
+                            logger_info(f"[INFO] Suppression réussie de {nom_f}")
+
                 except Exception as e:
                     reponse.update({K_CODE: 500, K_MESS: f"Erreur système: {str(e)}"})
 
             conn.send(json.dumps(reponse).encode())
-            print("\n\n + + + + ============== + + + +\n\n")
+            logger_info("\n\n + + + + ============== + + + +\n\n")
 
         except Exception as e:
-            print(f"[ERREUR] {e} avec {addr}")
+            logger_erreur(f"Erreur de communication avec {addr} : {e}")
             break
 
     # Nettoyage des verrous
@@ -376,19 +474,24 @@ def demarrer_serveur():
             while True:
                 try:
                     conn, addr = server_socket.accept()
-                    threading.Thread(target=gerer_client, args=(conn, addr), daemon=True).start()
-                except: break
+                    threading.Thread(
+                        target=gerer_client, args=(conn, addr), daemon=True
+                    ).start()
+                except:
+                    break
 
         thread_accept = threading.Thread(target=accepter_clients, daemon=True)
         thread_accept.start()
         while True:
             if input().strip().upper() == "QUIT":
-                print("\033[91mArrêt du serveur...\033[0m")
+                logger_info("Arrêt du serveur...")
                 server_socket.close()
                 break
 
     except Exception as e:
-        print(f"Erreur au démarrage : {e}")
+        logger_erreur(f"Erreur au démarrage : {e}")
+
 
 if __name__ == "__main__":
+    configurer_journalisation()
     demarrer_serveur()
